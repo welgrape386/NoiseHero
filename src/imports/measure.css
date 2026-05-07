@@ -347,6 +347,13 @@ body{
   padding-bottom:20px;
 }
 
+.action-btn-stop,
+.action-btn-save{
+  font-family:'Space Grotesk',sans-serif;
+  font-size:13px;
+  font-weight:600;
+}
+
 .action-btn-stop{
   flex:1;
   border:none;
