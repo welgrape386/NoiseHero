@@ -4,9 +4,6 @@ import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { HomePage } from './pages/HomePage';
 import { MeasurePage } from './pages/MeasurePage';
-import { ReportPage } from './pages/ReportPage';
-import { ChatbotPage } from './pages/ChatbotPage';
-import { MyPage } from './pages/MyPage';
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const user = localStorage.getItem('noise_user');
@@ -25,18 +22,6 @@ export const router = createBrowserRouter([
   {
     path: '/measure',
     element: <RequireAuth><MeasurePage /></RequireAuth>,
-  },
-  {
-    path: '/report',
-    element: <RequireAuth><ReportPage /></RequireAuth>,
-  },
-  {
-    path: '/chatbot',
-    element: <RequireAuth><ChatbotPage /></RequireAuth>,
-  },
-  {
-    path: '/mypage',
-    element: <RequireAuth><MyPage /></RequireAuth>,
   },
   { path: '*', element: <Navigate to="/home" replace /> },
 ]);
