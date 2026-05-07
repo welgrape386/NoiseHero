@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+</head>
+
+<body>
+  <div class="screen">
+
+    <h2>누적 리포트</h2>
+
+    <button onclick="generatePDF()">PDF 생성</button>
+
+  </div>
+
+  <!-- Tab bar -->
+  <div class="tab-bar">
+
+    <div class="tab-item active" onclick="location.href='index.html'">
+      <svg width="22" height="22" fill="none" stroke="#1A3BDB" stroke-width="1.8" stroke-linecap="round"
+        stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+        <polyline points="9 22 9 12 15 12 15 22" />
+      </svg>
+      <span class="tab-label" style="color:var(--deep-blue);">홈</span>
+    </div>
+
+    <div class="tab-item" onclick="location.href='./pages/measure.html'">
+      <!-- 측정 -->
+      <svg width="22" height="22" fill="none" stroke="#7A8AB8" stroke-width="1.8" stroke-linecap="round"
+        stroke-linejoin="round" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" />
+        <circle cx="12" cy="12" r="3" />
+        <line x1="12" y1="2" x2="12" y2="4" />
+        <line x1="12" y1="20" x2="12" y2="22" />
+        <line x1="2" y1="12" x2="4" y2="12" />
+        <line x1="20" y1="12" x2="22" y2="12" />
+      </svg>
+      <span class="tab-label">측정</span>
+    </div>
+
+    <div class="tab-item" onclick="location.href='./pages/report.html'">
+      <!-- 이력 -->
+      <svg width="22" height="22" fill="none" stroke="#7A8AB8" stroke-width="1.8" stroke-linecap="round"
+        stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="16" y1="13" x2="8" y2="13" />
+        <line x1="16" y1="17" x2="8" y2="17" />
+      </svg>
+      <span class="tab-label">이력</span>
+    </div>
+
+    <div class="tab-item" onclick="location.href='./pages/report-guide.html'">
+      <!-- 신고안내 -->
+      <svg width="22" height="22" fill="none" stroke="#7A8AB8" stroke-width="1.8" stroke-linecap="round"
+        stroke-linejoin="round" viewBox="0 0 24 24">
+        <path
+          d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.23h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 8.91a16 16 0 0 0 6 6l.91-.91a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+      </svg>
+      <span class="tab-label">신고안내</span>
+    </div>
+
+    <div class="tab-item" onclick="location.href='./pages/chatbot.html'">
+      <!-- AI상담 -->
+      <svg width="22" height="22" fill="none" stroke="#7A8AB8" stroke-width="1.8" stroke-linecap="round"
+        stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      </svg>
+      <span class="tab-label">AI상담</span>
+    </div>
+
+  </div>
+
+  </div>
+
+  <script>
+    function generatePDF() {
+      alert("PDF 생성 완료 (추후 기능)");
+    }
+  </script>
+</body>
+
+</html>
