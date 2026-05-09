@@ -4,10 +4,14 @@ import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { HomePage } from './pages/HomePage';
 import { MeasurePage } from './pages/MeasurePage';
+import { ReportPage } from './pages/ReportPage';
+import { ChatbotPage } from './pages/ChatbotPage';
+import { MyPage } from './pages/MyPage';
 
 function RequireAuth({ children }: { children: ReactNode }) {
-  const user = localStorage.getItem('noise_user');
-  if (!user) return <Navigate to="/login" replace />;
+  // noise_token: JWT 액세스 토큰 (로그인/회원가입 성공 시 저장)
+  const token = localStorage.getItem('noise_token');
+  if (!token) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
@@ -22,6 +26,18 @@ export const router = createBrowserRouter([
   {
     path: '/measure',
     element: <RequireAuth><MeasurePage /></RequireAuth>,
+  },
+  {
+    path: '/report',
+    element: <RequireAuth><ReportPage /></RequireAuth>,
+  },
+  {
+    path: '/chatbot',
+    element: <RequireAuth><ChatbotPage /></RequireAuth>,
+  },
+  {
+    path: '/mypage',
+    element: <RequireAuth><MyPage /></RequireAuth>,
   },
   { path: '*', element: <Navigate to="/home" replace /> },
 ]);

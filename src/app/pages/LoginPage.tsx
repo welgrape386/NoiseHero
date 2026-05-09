@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Background } from '../components/Background';
-import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
+import { Eye, EyeOff, Lock, Mail, Code } from 'lucide-react';
+import { apiLogin, apiGetMe, setToken, isDevMode, setDevMode } from '../services/api';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -10,8 +11,9 @@ export function LoginPage() {
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [devMode, setDevModeState] = useState(isDevMode());
 
-  function handleLogin(e: React.FormEvent) {
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     if (!email || !password) {
@@ -19,12 +21,40 @@ export function LoginPage() {
       return;
     }
     setLoading(true);
-    setTimeout(() => {
-      // Mock auth – store in localStorage
-      localStorage.setItem('noise_user', JSON.stringify({ email, nickname: email.split('@')[0] }));
-      setLoading(false);
+    try {
+      // 1. 로그인 → access_token 취득
+      const loginRes = await apiLogin(email, password);
+      setToken(loginRes.access_token);
+
+      // 2. 내 정보 조회 → localStorage에 저장
+      try {
+        const me = await apiGetMe();
+        localStorage.setItem(
+          'noise_user',
+          JSON.stringify({
+            email: me.email,
+            nickname: me.nickname,
+            apartment_name: me.apartment_name,
+            dong: me.dong,
+            ho: me.ho,
+            floor: me.floor,
+          })
+        );
+      } catch {
+        // /auth/me 실패 시 최소 정보만 저장
+        localStorage.setItem('noise_user', JSON.stringify({ email }));
+      }
+
       navigate('/home');
-    }, 900);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '로그인에 실패했습니다.';
+      // 401 → 이메일/비밀번호 오류 메시지
+      setError(msg.includes('401') || msg.toLowerCase().includes('이메일') || msg.toLowerCase().includes('비밀번호')
+        ? '이메일 또는 비밀번호가 올바르지 않습니다.'
+        : msg);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -84,7 +114,7 @@ export function LoginPage() {
             소음<span style={{ color: '#1A3BDB' }}>ON</span>
           </div>
           <div style={{ fontSize: 13, color: '#7A8AB8', marginTop: 6 }}>
-            층간소음 측정 & 증거 수집 앱
+            층간소음 측정 &amp; 증거 수집 앱
           </div>
         </div>
 
@@ -191,6 +221,46 @@ export function LoginPage() {
             회원가입
           </button>
         </div>
+
+        {/* 개발 모드 토글 */}
+        <div
+          onClick={() => {
+            const newMode = !devMode;
+            setDevModeState(newMode);
+            setDevMode(newMode);
+          }}
+          style={{
+            marginTop: 16,
+            padding: '10px 16px',
+            borderRadius: 14,
+            background: devMode ? 'rgba(26,59,219,0.1)' : 'rgba(255,255,255,0.5)',
+            border: `1px solid ${devMode ? 'rgba(26,59,219,0.3)' : 'rgba(26,59,219,0.1)'}`,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            transition: 'all 0.2s',
+          }}
+        >
+          <Code size={14} color={devMode ? '#1A3BDB' : '#7A8AB8'} />
+          <span style={{ fontSize: 11, fontWeight: 600, color: devMode ? '#1A3BDB' : '#7A8AB8' }}>
+            개발 모드 {devMode ? 'ON' : 'OFF'}
+          </span>
+        </div>
+
+        {devMode && (
+          <div style={{
+            marginTop: 8,
+            fontSize: 10,
+            color: '#7A8AB8',
+            textAlign: 'center',
+            lineHeight: 1.4,
+            maxWidth: 280,
+          }}>
+            서버 없이 작동합니다. 아무 이메일/비밀번호(6자 이상)로 로그인 가능
+          </div>
+        )}
       </div>
     </div>
   );

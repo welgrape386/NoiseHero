@@ -2,10 +2,90 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { Background } from '../components/Background';
 import { TabBar } from '../components/TabBar';
-import { ChevronLeft, AlertTriangle, Save, Square } from 'lucide-react';
+import { ChevronLeft, AlertTriangle, Save, Square, CheckCircle, Mic } from 'lucide-react';
+import { apiSaveMeasure, LEGAL_STANDARDS, isNighttime } from '../services/api';
 
 type MeasureType = 'impact' | 'airborne';
 type MeasureState = 'idle' | 'measuring' | 'done';
+
+/** Web Audio API로 실시간 dB 측정 */
+class MicrophoneAnalyzer {
+  private audioContext: AudioContext | null = null;
+  private analyser: AnalyserNode | null = null;
+  private microphone: MediaStreamAudioSourceNode | null = null;
+  private dataArray: Uint8Array | null = null;
+  private stream: MediaStream | null = null;
+  private rafId: number | null = null;
+  private onUpdate: ((db: number) => void) | null = null;
+  private calibrationOffset = 0; // 마이크 보정값
+
+  async start(onUpdate: (db: number) => void, calibrationOffset = 0) {
+    this.onUpdate = onUpdate;
+    this.calibrationOffset = calibrationOffset;
+
+    try {
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        }
+      });
+
+      this.audioContext = new AudioContext();
+      this.analyser = this.audioContext.createAnalyser();
+      this.analyser.fftSize = 2048;
+      this.analyser.smoothingTimeConstant = 0.3;
+
+      this.microphone = this.audioContext.createMediaStreamSource(this.stream);
+      this.microphone.connect(this.analyser);
+
+      this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+      this.analyze();
+    } catch (err) {
+      console.error('마이크 접근 실패:', err);
+      throw new Error('마이크 권한이 거부되었습니다.');
+    }
+  }
+
+  private analyze = () => {
+    if (!this.analyser || !this.dataArray || !this.onUpdate) return;
+
+    this.analyser.getByteTimeDomainData(this.dataArray);
+
+    // RMS (Root Mean Square) 계산
+    let sum = 0;
+    for (let i = 0; i < this.dataArray.length; i++) {
+      const normalized = (this.dataArray[i] - 128) / 128;
+      sum += normalized * normalized;
+    }
+    const rms = Math.sqrt(sum / this.dataArray.length);
+
+    // dB 변환 (기준값 조정 + 보정값 적용)
+    const db = rms > 0 ? 20 * Math.log10(rms) + 94 + this.calibrationOffset : 0;
+    const clampedDb = Math.max(0, Math.min(120, db));
+
+    this.onUpdate(clampedDb);
+    this.rafId = requestAnimationFrame(this.analyze);
+  };
+
+  stop() {
+    if (this.rafId) cancelAnimationFrame(this.rafId);
+    if (this.microphone) this.microphone.disconnect();
+    if (this.stream) {
+      this.stream.getTracks().forEach(track => track.stop());
+    }
+    if (this.audioContext) this.audioContext.close();
+
+    this.audioContext = null;
+    this.analyser = null;
+    this.microphone = null;
+    this.dataArray = null;
+    this.stream = null;
+    this.rafId = null;
+    this.onUpdate = null;
+  }
+}
 
 function GlassCard({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
@@ -20,11 +100,13 @@ function GlassCard({ children, style }: { children: React.ReactNode; style?: Rea
   );
 }
 
-function getHourInfo() {
-  const h = new Date().getHours();
-  return h >= 6 && h < 22
-    ? { label: '주간', leqLimit: 39, lmaxLimit: 57 }
-    : { label: '야간', leqLimit: 34, lmaxLimit: 49 };
+/** 측정 유형과 시간대에 따른 법적 기준 반환 */
+function getLimits(type: MeasureType) {
+  const night = isNighttime();
+  const zone = night ? 'nighttime' : 'daytime';
+  const label = night ? '야간' : '주간';
+  const std = LEGAL_STANDARDS[type === 'impact' ? 'impact' : 'airborne'][zone];
+  return { label, leqLimit: std.leq, lmaxLimit: std.lmax };
 }
 
 export function MeasurePage() {
@@ -35,86 +117,106 @@ export function MeasurePage() {
   const [dbVal, setDbVal] = useState(0);
   const [leq, setLeq] = useState(0);
   const [lmax, setLmax] = useState(0);
-  const [samples, setSamples] = useState<number[]>([]);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [micError, setMicError] = useState('');
+  const [calibration, setCalibration] = useState(0); // 마이크 보정값 (dB)
+
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const sampleRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const allSamplesRef = useRef<number[]>([]);
+  const micAnalyzerRef = useRef<MicrophoneAnalyzer | null>(null);
 
-  const duration = measureType === 'impact' ? 60 : 300; // 1 min or 5 min
-  const hourInfo = getHourInfo();
+  const duration = measureType === 'impact' ? 60 : 300; // 1분 or 5분
+  const limits = getLimits(measureType);
 
-  function startMeasure() {
-    setState('measuring');
+  async function startMeasure() {
+    setMicError('');
+    setSaved(false);
+    setSaveError('');
     setElapsed(0);
     setDbVal(0);
     setLeq(0);
     setLmax(0);
-    setSamples([]);
-    setSaved(false);
+    allSamplesRef.current = [];
 
-    // Simulate noise samples every 200ms
-    const allSamples: number[] = [];
-    sampleRef.current = setInterval(() => {
-      const base = measureType === 'impact' ? 52 : 38;
-      const noise = base + Math.random() * 18 - 4;
-      const val = Math.round(noise * 10) / 10;
-      allSamples.push(val);
+    try {
+      // 마이크 시작
+      const analyzer = new MicrophoneAnalyzer();
+      micAnalyzerRef.current = analyzer;
 
-      const newLeq = Math.round(
-        10 * Math.log10(allSamples.reduce((acc, v) => acc + Math.pow(10, v / 10), 0) / allSamples.length) * 10
-      ) / 10;
-      const newLmax = Math.max(...allSamples);
+      await analyzer.start((db) => {
+        const val = Math.round(db * 10) / 10;
+        allSamplesRef.current.push(val);
 
-      setDbVal(Math.round(val));
-      setLeq(Math.round(newLeq));
-      setLmax(Math.round(newLmax));
-      setSamples([...allSamples]);
-    }, 200);
+        const arr = allSamplesRef.current;
+        const newLeq = Math.round(
+          10 * Math.log10(arr.reduce((acc, v) => acc + Math.pow(10, v / 10), 0) / arr.length) * 10
+        ) / 10;
+        const newLmax = Math.max(...arr);
 
-    // Timer
-    timerRef.current = setInterval(() => {
-      setElapsed(prev => {
-        if (prev + 1 >= duration) {
-          stopMeasure();
-          return duration;
-        }
-        return prev + 1;
-      });
-    }, 1000);
+        setDbVal(val);
+        setLeq(newLeq);
+        setLmax(newLmax);
+      }, calibration);
+
+      // 측정 시작
+      setState('measuring');
+
+      // 타이머
+      timerRef.current = setInterval(() => {
+        setElapsed(prev => {
+          if (prev + 1 >= duration) {
+            stopMeasure();
+            return duration;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '마이크 접근에 실패했습니다.';
+      setMicError(msg);
+    }
   }
 
   function stopMeasure() {
     if (timerRef.current) clearInterval(timerRef.current);
-    if (sampleRef.current) clearInterval(sampleRef.current);
+    if (micAnalyzerRef.current) {
+      micAnalyzerRef.current.stop();
+      micAnalyzerRef.current = null;
+    }
     setState('done');
   }
 
-  function saveMeasure() {
-    const existing = JSON.parse(localStorage.getItem('noise_history') || '[]');
-    const now = new Date();
-    const record = {
-      id: Date.now(),
-      time: now.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
-      db: leq,
-      lmax,
-      type: measureType === 'impact' ? '직접충격' : '공기전달',
-      period: hourInfo.label,
-      over: leq > hourInfo.leqLimit,
-    };
-    localStorage.setItem('noise_history', JSON.stringify([record, ...existing]));
-    setSaved(true);
+  async function saveMeasure() {
+    if (saving || saved) return;
+    setSaving(true);
+    setSaveError('');
+    try {
+      const noise_type = measureType === 'impact' ? '직접충격' : '공기전달';
+      await apiSaveMeasure(leq, lmax, noise_type);
+      setSaved(true);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '저장에 실패했습니다.';
+      setSaveError(msg);
+    } finally {
+      setSaving(false);
+    }
   }
 
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      if (sampleRef.current) clearInterval(sampleRef.current);
+      if (micAnalyzerRef.current) {
+        micAnalyzerRef.current.stop();
+      }
     };
   }, []);
 
-  const isOver = leq > hourInfo.leqLimit;
+  const isLeqOver = leq > limits.leqLimit;
+  const isLmaxOver = limits.lmaxLimit !== null && lmax > limits.lmaxLimit;
+  const isOver = isLeqOver || isLmaxOver;
   const progress = Math.min(elapsed / duration, 1);
-  // Gauge: map dB 0-100 to arc 0-290
   const gaugeArc = Math.min(dbVal / 100 * 290, 290);
   const timeStr = `${String(Math.floor(elapsed / 60)).padStart(2, '0')}:${String(elapsed % 60).padStart(2, '0')}`;
 
@@ -166,7 +268,7 @@ export function MeasurePage() {
             <div>
               <div style={{ fontSize: 12, fontWeight: 600 }}>법적 기준 초과 감지</div>
               <div style={{ fontSize: 10, opacity: 0.8 }}>
-                현재 Leq {leq} dB — 기준({hourInfo.leqLimit} dB) 초과 +{leq - hourInfo.leqLimit} dB
+                Leq {leq} dB — 기준({limits.leqLimit} dB) 초과 +{Math.round((leq - limits.leqLimit) * 10) / 10} dB
               </div>
             </div>
           </div>
@@ -214,12 +316,9 @@ export function MeasurePage() {
                 </feMerge>
               </filter>
             </defs>
-            {/* Track */}
             <circle cx="130" cy="130" r="108" fill="none" stroke="rgba(26,59,219,0.08)" strokeWidth="14"
               strokeLinecap="round" strokeDasharray="440 440" transform="rotate(-220 130 130)" />
-            {/* Inner ring */}
             <circle cx="130" cy="130" r="92" fill="none" stroke="rgba(26,59,219,0.05)" strokeWidth="1" />
-            {/* Active arc */}
             <circle cx="130" cy="130" r="108" fill="none" stroke="url(#gaugeGrad)" strokeWidth="14"
               strokeLinecap="round"
               strokeDasharray={`${gaugeArc} 440`}
@@ -227,7 +326,6 @@ export function MeasurePage() {
               filter="url(#glow)"
               style={{ transition: 'stroke-dasharray 0.3s ease' }}
             />
-            {/* Progress arc (time) */}
             {state === 'measuring' && (
               <circle cx="130" cy="130" r="120" fill="none" stroke="rgba(26,59,219,0.15)" strokeWidth="4"
                 strokeLinecap="round"
@@ -238,7 +336,6 @@ export function MeasurePage() {
             )}
           </svg>
 
-          {/* Center */}
           <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             {state === 'measuring' && (
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#D93025', animation: 'noise-pulse 1.2s infinite', marginBottom: 4 }} />
@@ -258,6 +355,22 @@ export function MeasurePage() {
           </div>
         </div>
 
+        {/* 마이크 에러 */}
+        {micError && (
+          <div style={{
+            marginTop: 14, padding: '12px 16px', borderRadius: 14,
+            background: 'rgba(217,48,37,0.08)', border: '1px solid rgba(217,48,37,0.2)',
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <AlertTriangle size={16} color="#C0271E" />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#C0271E', marginBottom: 2 }}>마이크 접근 실패</div>
+              <div style={{ fontSize: 11, color: '#7A8AB8' }}>{micError}</div>
+              <div style={{ fontSize: 10, color: '#9AA6C0', marginTop: 4 }}>브라우저 설정에서 마이크 권한을 허용해주세요.</div>
+            </div>
+          </div>
+        )}
+
         {/* Action Buttons */}
         <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
           {state === 'idle' && (
@@ -269,8 +382,10 @@ export function MeasurePage() {
                 color: '#fff', cursor: 'pointer',
                 fontFamily: "'Space Grotesk', sans-serif", fontSize: 14, fontWeight: 600,
                 boxShadow: '0 8px 24px rgba(26,59,219,0.25)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
               }}
             >
+              <Mic size={16} color="#fff" />
               측정 시작
             </button>
           )}
@@ -292,23 +407,25 @@ export function MeasurePage() {
               </button>
               <button
                 onClick={saveMeasure}
+                disabled={saving || saved}
                 style={{
                   flex: 1.4, border: 'none', padding: 16, borderRadius: 999,
-                  background: 'linear-gradient(135deg, #2D52F0, #1A3BDB)',
-                  color: '#fff', cursor: 'pointer',
+                  background: saved ? 'rgba(26,59,219,0.2)' : 'linear-gradient(135deg, #2D52F0, #1A3BDB)',
+                  color: '#fff', cursor: saving || saved ? 'default' : 'pointer',
                   fontFamily: "'Space Grotesk', sans-serif", fontSize: 13, fontWeight: 600,
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  opacity: saving ? 0.7 : 1,
                 }}
               >
-                <Save size={14} color="#fff" />
-                {saved ? '저장됨 ✓' : '이력 저장'}
+                {saved ? <CheckCircle size={14} color="#fff" /> : <Save size={14} color="#fff" />}
+                {saving ? '저장 중...' : saved ? '저장됨 ✓' : '이력 저장'}
               </button>
             </>
           )}
           {state === 'done' && (
             <>
               <button
-                onClick={() => { setState('idle'); setDbVal(0); setLeq(0); setLmax(0); setElapsed(0); setSaved(false); }}
+                onClick={() => { setState('idle'); setDbVal(0); setLeq(0); setLmax(0); setElapsed(0); setSaved(false); setSaveError(''); }}
                 style={{
                   flex: 1, border: 'none', padding: 16, borderRadius: 999,
                   background: 'rgba(255,255,255,0.8)',
@@ -319,31 +436,54 @@ export function MeasurePage() {
                 다시 측정
               </button>
               <button
-                onClick={() => { if (!saved) saveMeasure(); }}
+                onClick={saveMeasure}
+                disabled={saving || saved}
                 style={{
                   flex: 1.4, border: 'none', padding: 16, borderRadius: 999,
-                  background: saved ? 'rgba(26,59,219,0.3)' : 'linear-gradient(135deg, #2D52F0, #1A3BDB)',
-                  color: '#fff', cursor: saved ? 'default' : 'pointer',
+                  background: saved ? 'rgba(26,59,219,0.2)' : 'linear-gradient(135deg, #2D52F0, #1A3BDB)',
+                  color: '#fff', cursor: saving || saved ? 'default' : 'pointer',
                   fontFamily: "'Space Grotesk', sans-serif", fontSize: 13, fontWeight: 600,
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  opacity: saving ? 0.7 : 1,
                 }}
               >
-                <Save size={14} color="#fff" />
-                {saved ? '저장 완료 ✓' : '이력 저장'}
+                {saved ? <CheckCircle size={14} color="#fff" /> : <Save size={14} color="#fff" />}
+                {saving ? '저장 중...' : saved ? '저장 완료 ✓' : '이력 저장'}
               </button>
             </>
           )}
         </div>
+
+        {/* 저장 오류 */}
+        {saveError && (
+          <div style={{
+            marginTop: 10, padding: '10px 14px', borderRadius: 12,
+            background: 'rgba(217,48,37,0.08)', border: '1px solid rgba(217,48,37,0.2)',
+            fontSize: 12, color: '#C0271E',
+            display: 'flex', alignItems: 'center', gap: 8,
+          }}>
+            <AlertTriangle size={13} color="#C0271E" />
+            {saveError}
+          </div>
+        )}
 
         {/* Info Card */}
         {state !== 'idle' && (
           <GlassCard style={{ marginTop: 16, padding: '6px 20px' }}>
             {[
               { key: '측정 시간', val: timeStr, danger: false },
-              { key: `Leq (${measureType === 'impact' ? '1분' : '5분'} 평균)`, val: `${leq} dB(A)`, danger: leq > hourInfo.leqLimit },
-              { key: 'Lmax (최고값)', val: `${lmax} dB(A)`, danger: lmax > hourInfo.lmaxLimit },
-              { key: '시간대', val: null, badge: `${hourInfo.label} ${new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}` },
-              { key: '법적 기준', val: `Leq ${hourInfo.leqLimit} / Lmax ${hourInfo.lmaxLimit} dB`, danger: false },
+              { key: `Leq (${measureType === 'impact' ? '1분' : '5분'} 평균)`, val: `${leq} dB(A)`, danger: isLeqOver },
+              ...(limits.lmaxLimit !== null
+                ? [{ key: 'Lmax (최고값)', val: `${lmax} dB(A)`, danger: isLmaxOver }]
+                : [{ key: 'Lmax (최고값)', val: `${lmax} dB(A)`, danger: false }]),
+              { key: '시간대', val: null, badge: `${limits.label} ${new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}` },
+              {
+                key: '법적 기준',
+                val: limits.lmaxLimit !== null
+                  ? `Leq ${limits.leqLimit} / Lmax ${limits.lmaxLimit} dB`
+                  : `Leq ${limits.leqLimit} dB (Lmax 미적용)`,
+                danger: false,
+              },
             ].map((row, i) => (
               <div key={i} style={{
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -351,7 +491,7 @@ export function MeasurePage() {
                 borderTop: i > 0 ? '1px solid rgba(26,59,219,0.07)' : 'none',
               }}>
                 <span style={{ fontSize: 12, color: '#7A8AB8' }}>{row.key}</span>
-                {row.badge ? (
+                {'badge' in row && row.badge ? (
                   <div style={{ padding: '3px 10px', borderRadius: 999, background: 'rgba(26,59,219,0.1)', color: '#1A3BDB', fontSize: 11 }}>
                     {row.badge}
                   </div>
@@ -389,18 +529,73 @@ export function MeasurePage() {
 
         {/* Idle State */}
         {state === 'idle' && (
-          <GlassCard style={{ marginTop: 16, padding: 20, textAlign: 'center' }}>
-            <div style={{ fontSize: 13, color: '#7A8AB8', marginBottom: 8 }}>측정 안내</div>
-            <div style={{ fontSize: 12, color: '#9AA6C0', lineHeight: 1.6 }}>
-              {measureType === 'impact'
-                ? '직접충격음: 발소리, 뛰는 소리 등 충격성 소음\nLeq + Lmax 기준 적용 (1분 측정)'
-                : '공기전달음: TV, 음악 등 지속성 소음\nLeq 기준 적용 (5분 측정)'}
-            </div>
-            <div style={{ marginTop: 14, padding: '10px 16px', borderRadius: 12, background: 'rgba(26,59,219,0.06)', display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 11, color: '#7A8AB8' }}>현재 시간대</span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#1A3BDB' }}>{hourInfo.label} — Leq {hourInfo.leqLimit} dB 기준</span>
-            </div>
-          </GlassCard>
+          <>
+            <GlassCard style={{ marginTop: 16, padding: 20, textAlign: 'center' }}>
+              <div style={{ fontSize: 13, color: '#7A8AB8', marginBottom: 8 }}>측정 안내</div>
+              <div style={{ fontSize: 12, color: '#9AA6C0', lineHeight: 1.6, whiteSpace: 'pre-line' }}>
+                {measureType === 'impact'
+                  ? '직접충격음: 발소리, 뛰는 소리 등 충격성 소음\nLeq + Lmax 기준 적용 (1분 측정)'
+                  : '공기전달음: TV, 음악 등 지속성 소음\nLeq 기준 적용 (5분 측정, Lmax 미적용)'}
+              </div>
+              <div style={{ marginTop: 14, padding: '10px 16px', borderRadius: 12, background: 'rgba(26,59,219,0.06)', display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 11, color: '#7A8AB8' }}>현재 시간대</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#1A3BDB' }}>
+                  {limits.label} — Leq {limits.leqLimit} dB 기준
+                </span>
+              </div>
+            </GlassCard>
+
+            {/* 마이크 보정 */}
+            <GlassCard style={{ marginTop: 12, padding: '16px 20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <Mic size={14} color="#7A8AB8" />
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#7A8AB8' }}>마이크 보정</span>
+              </div>
+              <div style={{ fontSize: 11, color: '#9AA6C0', marginBottom: 12, lineHeight: 1.5 }}>
+                전문 소음측정기와 비교하여 보정값을 조정하세요. 스마트폰 마이크는 ±5dB 오차가 있을 수 있습니다.
+              </div>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <button
+                  onClick={() => setCalibration(c => Math.max(-20, c - 1))}
+                  style={{
+                    width: 32, height: 32, borderRadius: 10, border: '1px solid rgba(26,59,219,0.2)',
+                    background: 'rgba(255,255,255,0.8)', cursor: 'pointer',
+                    fontFamily: "'Space Grotesk', sans-serif", fontSize: 16, fontWeight: 700, color: '#1A3BDB',
+                  }}
+                >
+                  −
+                </button>
+                <div style={{ flex: 1, textAlign: 'center' }}>
+                  <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 18, fontWeight: 700, color: '#0A1866' }}>
+                    {calibration > 0 ? '+' : ''}{calibration} dB
+                  </div>
+                  <div style={{ fontSize: 9, color: '#9AA6C0', marginTop: 2 }}>보정값</div>
+                </div>
+                <button
+                  onClick={() => setCalibration(c => Math.min(20, c + 1))}
+                  style={{
+                    width: 32, height: 32, borderRadius: 10, border: '1px solid rgba(26,59,219,0.2)',
+                    background: 'rgba(255,255,255,0.8)', cursor: 'pointer',
+                    fontFamily: "'Space Grotesk', sans-serif", fontSize: 16, fontWeight: 700, color: '#1A3BDB',
+                  }}
+                >
+                  +
+                </button>
+              </div>
+              {calibration !== 0 && (
+                <button
+                  onClick={() => setCalibration(0)}
+                  style={{
+                    marginTop: 10, width: '100%', padding: '6px', borderRadius: 8,
+                    border: '1px solid rgba(26,59,219,0.15)', background: 'rgba(255,255,255,0.6)',
+                    fontSize: 10, color: '#7A8AB8', cursor: 'pointer',
+                  }}
+                >
+                  초기화
+                </button>
+              )}
+            </GlassCard>
+          </>
         )}
       </div>
 

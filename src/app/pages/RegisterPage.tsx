@@ -1,16 +1,26 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Background } from '../components/Background';
-import { Eye, EyeOff, Lock, Mail, User, ChevronLeft } from 'lucide-react';
+import { Eye, EyeOff, Lock, Mail, User, Building, ChevronLeft } from 'lucide-react';
+import { apiSignup, apiLogin, apiGetMe, setToken } from '../services/api';
 
 export function RegisterPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
+
+  // Step 1
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [pwConfirm, setPwConfirm] = useState('');
-  const [nickname, setNickname] = useState('');
   const [showPw, setShowPw] = useState(false);
+
+  // Step 2
+  const [nickname, setNickname] = useState('');
+  const [apartmentName, setApartmentName] = useState('');
+  const [dong, setDong] = useState('');
+  const [ho, setHo] = useState('');
+  const [floor, setFloor] = useState('');
+
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -24,16 +34,53 @@ export function RegisterPage() {
     setStep(2);
   }
 
-  function handleStep2(e: React.FormEvent) {
+  async function handleStep2(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     if (!nickname) return setError('닉네임을 입력해주세요.');
+
     setLoading(true);
-    setTimeout(() => {
-      localStorage.setItem('noise_user', JSON.stringify({ email, nickname }));
-      setLoading(false);
+    try {
+      // 1. 회원가입 API 호출
+      await apiSignup({
+        email,
+        password,
+        nickname,
+        ...(apartmentName && { apartment_name: apartmentName }),
+        ...(dong && { dong }),
+        ...(ho && { ho }),
+        ...(floor && !isNaN(Number(floor)) && { floor: Number(floor) }),
+      });
+
+      // 2. 자동 로그인 → access_token 취득
+      const loginRes = await apiLogin(email, password);
+      setToken(loginRes.access_token);
+
+      // 3. 내 정보 저장
+      try {
+        const me = await apiGetMe();
+        localStorage.setItem(
+          'noise_user',
+          JSON.stringify({
+            email: me.email,
+            nickname: me.nickname,
+            apartment_name: me.apartment_name,
+            dong: me.dong,
+            ho: me.ho,
+            floor: me.floor,
+          })
+        );
+      } catch {
+        localStorage.setItem('noise_user', JSON.stringify({ email, nickname }));
+      }
+
       navigate('/home');
-    }, 900);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '회원가입에 실패했습니다.';
+      setError(msg.includes('이미') ? '이미 사용 중인 이메일입니다.' : msg);
+    } finally {
+      setLoading(false);
+    }
   }
 
   const inputStyle: React.CSSProperties = {
@@ -45,6 +92,11 @@ export function RegisterPage() {
     fontSize: 14, color: '#0A1866',
     outline: 'none',
     fontFamily: "'DM Sans', sans-serif",
+  };
+
+  const inputNoIconStyle: React.CSSProperties = {
+    ...inputStyle,
+    padding: '14px',
   };
 
   return (
@@ -64,6 +116,7 @@ export function RegisterPage() {
           display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center',
           padding: '0 28px',
+          overflowY: 'auto',
         }}
       >
         {/* Back button */}
@@ -150,13 +203,60 @@ export function RegisterPage() {
                 프로필 정보
               </div>
 
+              {/* 닉네임 (필수) */}
               <div style={{ position: 'relative' }}>
                 <User size={16} color="#7A8AB8" style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }} />
-                <input type="text" placeholder="닉네임" value={nickname} onChange={e => setNickname(e.target.value)} style={inputStyle} />
+                <input type="text" placeholder="닉네임 *" value={nickname} onChange={e => setNickname(e.target.value)} style={inputStyle} />
+              </div>
+
+              {/* 아파트 정보 (선택) */}
+              <div style={{
+                padding: '14px 16px 10px',
+                borderRadius: 14,
+                background: 'rgba(26,59,219,0.04)',
+                border: '1px solid rgba(26,59,219,0.08)',
+                display: 'flex', flexDirection: 'column', gap: 10,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                  <Building size={14} color="#7A8AB8" />
+                  <span style={{ fontSize: 11, fontWeight: 600, color: '#7A8AB8' }}>아파트 정보 (선택)</span>
+                </div>
+
+                <input
+                  type="text"
+                  placeholder="아파트명 (예: 래미안 아파트)"
+                  value={apartmentName}
+                  onChange={e => setApartmentName(e.target.value)}
+                  style={inputNoIconStyle}
+                />
+
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    type="text"
+                    placeholder="동"
+                    value={dong}
+                    onChange={e => setDong(e.target.value)}
+                    style={{ ...inputNoIconStyle, flex: 1 }}
+                  />
+                  <input
+                    type="text"
+                    placeholder="호수"
+                    value={ho}
+                    onChange={e => setHo(e.target.value)}
+                    style={{ ...inputNoIconStyle, flex: 1 }}
+                  />
+                  <input
+                    type="number"
+                    placeholder="층수"
+                    value={floor}
+                    onChange={e => setFloor(e.target.value)}
+                    style={{ ...inputNoIconStyle, flex: 1 }}
+                  />
+                </div>
               </div>
 
               <div style={{ fontSize: 11, color: '#7A8AB8', padding: '2px 4px' }}>
-                아파트 정보는 마이페이지에서 설정할 수 있습니다.
+                아파트 정보는 마이페이지에서도 수정할 수 있습니다.
               </div>
             </>
           )}
