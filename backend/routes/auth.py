@@ -7,7 +7,7 @@ from jose import jwt, JWTError
 import bcrypt
 from dotenv import load_dotenv
 
-from models.user import UserSignup, UserLogin
+from models.user import UserSignup, UserLogin, UserUpdate
 from database import user_collection
 
 load_dotenv()
@@ -167,5 +167,36 @@ async def get_me(
         "apartment_name": current_user.get("apartment_name"),
         "dong": current_user.get("dong"),
         "ho": current_user.get("ho"),
-        "floor": current_user.get("floor")
+        "floor": current_user.get("floor"),
+        "building_company": current_user.get("building_company"),
+        "slab_thickness": current_user.get("slab_thickness"),
+        "structure": current_user.get("structure"),
+        "committee": current_user.get("committee"),
+        "management_office": current_user.get("management_office"),
+        "management_phone": current_user.get("management_phone")
+    }
+
+@router.patch("/me")
+async def update_me(
+    update_data: UserUpdate,
+    current_user: dict = Depends(get_current_user)
+):
+    email = current_user.get("email")
+
+    update_dict = update_data.dict(exclude_unset=True)
+
+    if not update_dict:
+        raise HTTPException(
+            status_code=400,
+            detail="수정할 정보가 없습니다."
+        )
+
+    await user_collection.update_one(
+        {"email": email},
+        {"$set": update_dict}
+    )
+
+    return {
+        "message": "정보 수정 성공",
+        "updated_fields": update_dict
     }
