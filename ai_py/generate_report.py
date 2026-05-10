@@ -1,6 +1,6 @@
 from openai import OpenAI
 
-client = OpenAI(api_key="api-key-")
+client = OpenAI(api_key="API-KEY")
 
 # =============================================
 # [백엔드 GET /auth/me 에서 가져오는 데이터]
