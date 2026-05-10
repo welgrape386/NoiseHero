@@ -6,7 +6,6 @@
  *
  * 개발 모드: localStorage에 'dev_mode=true' 설정 시 서버 없이 작동
  */
-
 // 환경에 따라 API URL 자동 전환
 export const BASE_URL = import.meta.env.VITE_API_URL ||
   (import.meta.env.DEV
@@ -314,4 +313,45 @@ export function mapRecord(r: NoiseRecord): HistoryItem {
     leq_standard: r.leq_standard,
     lmax_standard: r.lmax_standard,
   };
+}
+
+/** PATCH /auth/me — 내 정보 수정 */
+export async function apiUpdateMe(body: {
+  nickname?: string;
+  apartment_name?: string;
+  dong?: string;
+  ho?: string;
+  floor?: number;
+}): Promise<UserInfo> {
+
+  // 개발 모드
+  if (isDevMode()) {
+    const current = JSON.parse(localStorage.getItem('noise_user') || '{}');
+
+    const updated = {
+      ...current,
+      ...body,
+    };
+
+    localStorage.setItem('noise_user', JSON.stringify(updated));
+
+    return {
+      message: '수정 완료',
+      email: updated.email,
+      nickname: updated.nickname || '',
+      apartment_name: updated.apartment_name || '',
+      dong: updated.dong || '',
+      ho: updated.ho || '',
+      floor: updated.floor || 0,
+    };
+  }
+
+  // 실제 서버 요청
+  const res = await fetch(`${BASE_URL}/auth/me`, {
+    method: 'PATCH',
+    headers: jsonHeaders(true),
+    body: JSON.stringify(body),
+  });
+
+  return handleResponse<UserInfo>(res);
 }

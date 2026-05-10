@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import { Background } from '../components/Background';
 import { TabBar } from '../components/TabBar';
 import { User, Building, Settings, LogOut, ChevronRight, Mic, Bell, Shield, HelpCircle, Volume2, RefreshCw } from 'lucide-react';
-import { apiGetMe, clearAuth } from '../services/api';
+import { apiGetMe, apiUpdateMe, clearAuth } from '../services/api';
 
 function GlassCard({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
@@ -117,19 +117,61 @@ export function MyPage() {
 
   useEffect(() => { fetchMe(); }, []);
 
-  function saveProfile() {
-    const updated = { ...user, nickname };
-    setUser(updated);
-    localStorage.setItem('noise_user', JSON.stringify(updated));
-    setModal(null);
-  }
+  async function saveProfile() {
+  try {
 
-  function saveApartment() {
-    const updated = { ...user, apartment_name: apartment, dong, ho, floor: Number(floor) || 0 };
+    const updatedMe = await apiUpdateMe({
+      nickname,
+    });
+
+    const updated = {
+      ...user,
+      nickname: updatedMe.nickname,
+    };
+
     setUser(updated);
-    localStorage.setItem('noise_user', JSON.stringify(updated));
+
+    localStorage.setItem(
+      'noise_user',
+      JSON.stringify(updated)
+    );
+
     setModal(null);
+
+  } catch (err) {
+    console.error(err);
+    alert('프로필 수정 실패');
   }
+}
+
+  async function saveApartment() {
+  try {
+    const updatedMe = await apiUpdateMe({
+      apartment_name: apartment,
+      dong,
+      ho,
+      floor: Number(floor) || 0,
+    });
+
+    const updated = {
+      ...user,
+      apartment_name: updatedMe.apartment_name,
+      dong: updatedMe.dong,
+      ho: updatedMe.ho,
+      floor: updatedMe.floor,
+    };
+
+    setUser(updated);
+
+    localStorage.setItem('noise_user', JSON.stringify(updated));
+
+    setModal(null);
+
+  } catch (err) {
+    console.error(err);
+    alert('아파트 정보 수정 실패');
+  }
+}
 
   function startCalibration() {
     setCalibrating(true);
