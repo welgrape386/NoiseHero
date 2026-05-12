@@ -2,7 +2,7 @@ from openai import OpenAI
 from prompts.legal import search_legal
 import json
 
-client = OpenAI(api_key="OPENAI_API_KEY")
+client = OpenAI(api_key="api키")
 
 # =============================================
 # [백엔드 GET /auth/me 에서 가져오는 데이터]
