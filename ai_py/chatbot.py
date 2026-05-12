@@ -1,17 +1,16 @@
 from openai import OpenAI
+from prompts.legal import search_legal
 from prompts.system import SYSTEM_PROMPT
 from prompts.templates import TEMPLATES
 
-client = OpenAI(api_key="YOUR_API_KEY")
+client = OpenAI(api_key="OPENAI_API_KEY")
 
 # =============================================
-# [대화 이력 관리]
-# GPT는 이전 대화를 기억 못하므로 직접 관리
+# 대화 이력 관리
 # =============================================
 conversation_history = []
 
 def get_template_response(user_input):
-    # 템플릿 버튼 클릭 시 해당 응답 반환
     return TEMPLATES.get(user_input, None)
 
 print("=" * 50)
@@ -31,40 +30,40 @@ while True:
     if not user_input.strip():
         continue
 
-    # 템플릿 버튼 클릭 여부 확인
+    # 템플릿 버튼 확인
     template_response = get_template_response(user_input)
     if template_response:
         print(f"\n챗봇: {template_response}\n")
-        # 템플릿 응답도 대화 이력에 추가
-        conversation_history.append({
-            "role": "user",
-            "content": user_input
-        })
-        conversation_history.append({
-            "role": "assistant",
-            "content": template_response
-        })
+        conversation_history.append({"role": "user", "content": user_input})
+        conversation_history.append({"role": "assistant", "content": template_response})
         continue
 
-    # 일반 질문은 GPT 호출
-    conversation_history.append({
-        "role": "user",
-        "content": user_input
-    })
+    # =============================================
+    # FAISS 검색 → 관련 법령 찾기
+    # legal.py의 search_legal 함수 사용
+    # =============================================
+    legal_context = search_legal(user_input)
 
+    # 시스템 프롬프트에 관련 법령 추가
+    enhanced_prompt = SYSTEM_PROMPT + f"""
+
+[관련 법령 - 아래 내용을 참고하여 답변할 것]
+{legal_context}
+"""
+
+    # 대화 이력에 사용자 메시지 추가
+    conversation_history.append({"role": "user", "content": user_input})
+
+    # GPT API 호출
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": enhanced_prompt},
             *conversation_history
         ]
     )
 
     assistant_message = response.choices[0].message.content
-
-    conversation_history.append({
-        "role": "assistant",
-        "content": assistant_message
-    })
+    conversation_history.append({"role": "assistant", "content": assistant_message})
 
     print(f"\n챗봇: {assistant_message}\n")

@@ -1,167 +1,196 @@
 from openai import OpenAI
+from prompts.legal import search_legal
+import json
 
-client = OpenAI(api_key="API-KEY")
+client = OpenAI(api_key="OPENAI_API_KEY")
 
 # =============================================
 # [백엔드 GET /auth/me 에서 가져오는 데이터]
-# 로그인한 사용자 정보 + 마이페이지에서 설정한 건물 정보
 # =============================================
 user_info = {
-    "이름": "김나애",
-    "휴대폰": "010-1234-5678", 
-    "주소": "서울시 강남구 아파트 101동 502호",
-    "관리사무소_연락처": "02-123-4567",
-    "상대세대_위치": "윗집", # 민원서 생성 화면에서 사용자가 직접 선택
-    "상대세대_주소": "101동 602호", # 민원서 생성 화면에서 사용자가 직접 입력
-    "건설사": "현대건설",
-    "주택형태": "아파트",
-    "슬라브두께": "210mm",
-    "구조": "벽식",
-    "층간소음위원회": "없음",
-    "관리사무소_유무": "있음",
+    "email": "test@test.com",
+    "nickname": "김나애",
+    "apartment_name": "강남아파트",
+    "dong": "101",
+    "ho": "502",
+    "floor": 5,
+    "building_company": "현대건설",
+    "slab_thickness": "210mm",
+    "structure": "벽식",
+    "committee": "없음",
+    "management_office": "있음",
+    "management_phone": "02-123-4567",
 }
 
 # =============================================
 # [백엔드 GET /noise/history 에서 가져오는 데이터]
-# 사용자가 앱에서 체크박스로 선택한 측정 이력들
-# 실제로는 프론트에서 선택한 _id 목록을 백엔드에 넘기면
-# 백엔드가 해당 이력만 필터링해서 반환
 # =============================================
 selected_records = [
     {
-        "날짜": "2026년 5월 5일",
-        "시간": "22:30",
-        "소음유형": "직접충격음",
-        "주소음원": "뛰거나 걷는소리",
-        "부소음원": "가구끄는소리",
-        "피해유형": "윗집의 소음",
-        "Leq": 52.3,
-        "Lmax": 68.1,
-        "주야간": "야간",
-        "법적기준_Leq": 34,
-        "법적기준_Lmax": 52,
+        "measured_at": "2026-05-05T22:30:00",
+        "noise_type": "직접충격",
+        "time_zone": "야간",
+        "primary_source": "뛰거나 걷는소리",
+        "secondary_source": "가구끄는소리",
+        "leq": 52.3,
+        "lmax": 68.1,
+        "leq_standard": 34.0,
+        "lmax_standard": 52.0,
+        "is_exceeded": True,
     },
     {
-        "날짜": "2026년 5월 6일",
-        "시간": "23:10",
-        "소음유형": "직접충격음",
-        "주소음원": "뛰거나 걷는소리",
-        "부소음원": "없음",
-        "피해유형": "윗집의 소음",
-        "Leq": 55.1,
-        "Lmax": 70.3,
-        "주야간": "야간",
-        "법적기준_Leq": 34,
-        "법적기준_Lmax": 52,
+        "measured_at": "2026-05-06T23:10:00",
+        "noise_type": "직접충격",
+        "time_zone": "야간",
+        "primary_source": "뛰거나 걷는소리",
+        "secondary_source": "없음",
+        "leq": 55.1,
+        "lmax": 70.3,
+        "leq_standard": 34.0,
+        "lmax_standard": 52.0,
+        "is_exceeded": True,
     },
     {
-        "날짜": "2026년 5월 7일",
-        "시간": "23:40",
-        "소음유형": "직접충격음",
-        "주소음원": "뛰거나 걷는소리",
-        "부소음원": "가구끄는소리",
-        "피해유형": "윗집의 소음",
-        "Leq": 54.0,
-        "Lmax": 69.5,
-        "주야간": "야간",
-        "법적기준_Leq": 34,
-        "법적기준_Lmax": 52,
+        "measured_at": "2026-05-07T23:40:00",
+        "noise_type": "직접충격",
+        "time_zone": "야간",
+        "primary_source": "뛰거나 걷는소리",
+        "secondary_source": "가구끄는소리",
+        "leq": 54.0,
+        "lmax": 69.5,
+        "leq_standard": 34.0,
+        "lmax_standard": 52.0,
+        "is_exceeded": True,
     },
 ]
 
 # =============================================
 # [Python 코드에서 자동 계산하는 값들]
-# DB에서 가져온 데이터를 가공해서 프롬프트에 넣는 부분
 # =============================================
 
 # 피해 기간 자동 계산
-first_date = selected_records[0]['날짜']
-last_date = selected_records[-1]['날짜']
+first_date = selected_records[0]['measured_at'][:10]
+last_date = selected_records[-1]['measured_at'][:10]
 period = f"{first_date} ~ {last_date}"
 
 # 피해 시간대 추출
-time_list = [r['시간'] for r in selected_records]
+time_list = [r['measured_at'][11:16] for r in selected_records]
 time_range = f"{min(time_list)} ~ {max(time_list)}"
 
 # 주야간 종류 추출
-daynight_types = list(set([r['주야간'] for r in selected_records]))
+daynight_types = list(set([r['time_zone'] for r in selected_records]))
 daynight_str = ", ".join(daynight_types)
 
 # 이력 텍스트 변환
 history_text = ""
 for i, r in enumerate(selected_records, 1):
     history_text += f"""
-{i}. 날짜/시간: {r['날짜']} {r['시간']} ({r['주야간']})
-   측정값: Leq {r['Leq']}dB / Lmax {r['Lmax']}dB
-   법적기준: Leq {r['법적기준_Leq']}dB / Lmax {r['법적기준_Lmax']}dB
-   초과여부: Leq {r['Leq'] - r['법적기준_Leq']:+.1f}dB / Lmax {r['Lmax'] - r['법적기준_Lmax']:+.1f}dB
-   주소음원: {r['주소음원']} / 부소음원: {r['부소음원']}
+{i}. 날짜/시간: {r['measured_at']} ({r['time_zone']})
+   측정값: Leq {r['leq']}dB / Lmax {r['lmax']}dB
+   법적기준: Leq {r['leq_standard']}dB / Lmax {r['lmax_standard']}dB
+   초과여부: Leq {r['leq'] - r['leq_standard']:+.1f}dB / Lmax {r['lmax'] - r['lmax_standard']:+.1f}dB
+   주소음원: {r['primary_source']} / 부소음원: {r['secondary_source']}
 """
-    
+
+# =============================================
+# FAISS로 민원서 관련 법령 검색
+# =============================================
+legal_context = search_legal("층간소음 법적 기준 직접충격 야간 민원서")
+
 # =============================================
 # [GPT 프롬프트 설정]
 # =============================================
-
-#면책 문구(PDF에는 미포함, 앱 화면에만 표시)
 DISCLAIMER = "※ 본 문서는 AI가 작성한 초안이며 최종 제출 책임은 신청인에게 있습니다."
 
-system_prompt = """
+system_prompt = f"""
 당신은 층간소음 피해자를 위한 민원서 작성 전문가입니다.
-이웃사이센터 제출용 층간소음 민원서를 작성합니다.
+이웃사이센터 제출용 층간소음 민원서를 JSON 형태로 작성합니다.
 
 작성 규칙:
-1. 문서 제목은 반드시 "층간소음 피해 현장진단 신청서"로 작성
-2. 문서 상단에 작성일을 마지막 측정일로 표기
-3. 신청인 정보, 상대세대 정보, 건물 정보 섹션을 모두 빠짐없이 포함할 것
-4. 소음 측정 이력에는 반드시 주소음원과 부소음원을 포함할 것
-5. 측정값과 법적 기준을 명확히 비교하여 초과 여부 수치로 명시
-6. 감정적 표현 배제, 사실 중심으로 작성
-7. 소음 이력이 여러 건인 경우 반복적·지속적 피해임을 강조
-8. 피해내용 섹션은 반드시 100자 이내로, "피해기간: OO, 피해시간: OO" 형식으로만 작성할 것
-9. 결론 섹션은 아래 형식으로 각 항목을 2문장 이상 구체적으로 작성할 것:
-   1) 현장진단 요청: 초과 횟수와 피해 기간을 언급하며 즉각적인 현장진단 요청
-   2) 소음 측정 요청: 피해 발생 시간대를 명시하며 정밀 소음 측정 요청
-   3) 재발 방지 조치 요청: 반복 피해 사실을 강조하며 신속한 조치 요청
-10. 문서 마지막에 [DISCLAIMER] 태그를 그대로 출력할 것
+1. 반드시 아래 JSON 구조로만 응답할 것. 다른 텍스트 절대 포함 금지.
+2. 모든 값은 사실 중심으로 작성, 감정적 표현 배제
+3. 소음 이력이 여러 건인 경우 반복적·지속적 피해임을 강조
+4. damage_summary는 반드시 100자 이내로 작성
+5. conclusion의 각 항목은 2문장 이상 구체적으로 작성
+
+응답 JSON 구조:
+{{
+  "title": "층간소음 피해 현장진단 신청서",
+  "created_at": "마지막 측정일",
+  "applicant": {{
+    "nickname": "신청인 닉네임",
+    "apartment_name": "아파트명",
+    "dong": "동",
+    "ho": "호수",
+    "floor": "층수",
+    "management_phone": "관리사무소 연락처"
+  }},
+  "target": {{
+    "location": "상대세대 위치 (윗집/아랫집/옆집)",
+    "address": "상대세대 주소"
+  }},
+  "building": {{
+    "building_company": "건설사",
+    "slab_thickness": "슬라브 두께",
+    "structure": "건물 구조",
+    "committee": "층간소음위원회 유무",
+    "management_office": "관리사무소 유무"
+  }},
+  "noise_records": [
+    {{
+      "measured_at": "측정일시",
+      "time_zone": "주간/야간",
+      "noise_type": "직접충격/공기전달",
+      "primary_source": "주소음원",
+      "secondary_source": "부소음원",
+      "leq": 0.0,
+      "lmax": 0.0,
+      "leq_standard": 0.0,
+      "lmax_standard": 0.0,
+      "leq_exceeded": 0.0,
+      "lmax_exceeded": 0.0
+    }}
+  ],
+  "damage_summary": "피해기간: OO, 피해시간: OO (100자 이내)",
+  "conclusion": {{
+    "site_inspection": "현장진단 요청 내용 (2문장 이상)",
+    "noise_measurement": "소음 측정 요청 내용 (2문장 이상)",
+    "prevention": "재발 방지 조치 요청 내용 (2문장 이상)"
+  }},
+  "disclaimer": "※ 본 문서는 AI가 작성한 초안이며 최종 제출 책임은 신청인에게 있습니다."
+}}
+
+[참고 법령]
+{legal_context}
 """
 
 user_prompt = f"""
-아래 정보를 바탕으로 이웃사이센터 제출용 층간소음 현장진단 신청서를 작성해주세요.
+아래 정보를 바탕으로 이웃사이센터 제출용 층간소음 현장진단 신청서를 JSON으로 작성해주세요.
 
 [신청인 정보]
-- 이름: {user_info['이름']}
-- 휴대폰: {user_info['휴대폰']}
-- 주소: {user_info['주소']}
-- 관리사무소 연락처: {user_info['관리사무소_연락처']}
+- 닉네임: {user_info['nickname']}
+- 아파트명: {user_info['apartment_name']}
+- 동: {user_info['dong']}
+- 호수: {user_info['ho']}
+- 층수: {user_info['floor']}
+- 관리사무소 연락처: {user_info['management_phone']}
 
 [상대세대 정보]
-- 주거위치: {user_info['상대세대_위치']}
-- 상세주소: {user_info['상대세대_주소']}
+- 주거위치: 윗집
+- 상세주소: 101동 602호
 
 [건물 정보]
-- 건설사: {user_info['건설사']}
-- 주택형태: {user_info['주택형태']}
-- 슬라브 두께: {user_info['슬라브두께']}
-- 구조: {user_info['구조']}
-- 층간소음 위원회: {user_info['층간소음위원회']}
-- 관리사무소: {user_info['관리사무소_유무']}
+- 건설사: {user_info['building_company']}
+- 슬라브 두께: {user_info['slab_thickness']}
+- 구조: {user_info['structure']}
+- 층간소음위원회: {user_info['committee']}
+- 관리사무소: {user_info['management_office']}
 
-[사용자가 선택한 소음 측정 이력 - 총 {len(selected_records)}건 / 피해기간: {period}]
+[소음 측정 이력 - 총 {len(selected_records)}건 / 피해기간: {period}]
 {history_text}
 
-작성 시 주의사항:
-- 건물 정보 섹션 반드시 포함할 것
-- 각 이력에 주소음원, 부소음원 반드시 포함할 것
-- 피해내용은 반드시 아래 형식으로만 작성할 것 (100자 이내 필수):
-  "피해기간: 약 {len(selected_records)}일 ({first_date}~{last_date}), 피해시간: {daynight_str} {time_range}"
-- 결론에는 아래 3가지를 각각 구체적인 문장으로 작성할 것:
-  1) 현장진단 요청
-  2) 소음 측정 요청
-  3) 재발 방지 조치 요청
-- 피해 기간 {period} 동안 총 {len(selected_records)}회 법적 기준 초과 사실을 강조할 것
-
-문서 마지막에 아래 면책 문구를 태그와 함께 그대로 출력하세요:
-[DISCLAIMER]{DISCLAIMER}[/DISCLAIMER]
+피해내용은 반드시 아래 형식으로 작성 (100자 이내):
+"피해기간: 약 {len(selected_records)}일 ({first_date}~{last_date}), 피해시간: {daynight_str} {time_range}"
 """
 
 # =============================================
@@ -177,17 +206,14 @@ response = client.chat.completions.create(
 
 result = response.choices[0].message.content
 
-# 면책 문구 분리
-# PDF 본문과 앱 화면 표시용 면책 문구 분리
-if "[DISCLAIMER]" in result:
-    main_doc = result.split("[DISCLAIMER]")[0].strip()
-    disclaimer = DISCLAIMER
-else:
-    main_doc = result
-    disclaimer = DISCLAIMER
-
-print("===== 민원서 본문 (PDF 변환용) =====")
-print(main_doc)
-print()
-print("===== 면책 문구 (앱 화면 표시용) =====")
-print(disclaimer)
+# JSON 파싱
+try:
+    # 백틱 제거 후 파싱
+    clean = result.replace("```json", "").replace("```", "").strip()
+    report_json = json.loads(clean)
+    print("===== 민원서 JSON (백엔드 전달용) =====")
+    print(json.dumps(report_json, ensure_ascii=False, indent=2))
+except Exception as e:
+    print(f"JSON 파싱 실패: {e}")
+    print("원본 출력:")
+    print(result)

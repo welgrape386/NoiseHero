@@ -1,43 +1,30 @@
-# =============================================
-# 법적 기준 및 신고 절차
-# 나중에 FAISS 연결되면 이 파일만 수정하면 됨
-# =============================================
-
-LEGAL_INFO = """
-[법적 기준 - 주거지역]
-- 직접충격 주간(06~22시): Leq 39dB / Lmax 57dB
-- 직접충격 야간(22~06시): Leq 34dB / Lmax 52dB
-- 공기전달 주간(06~22시): Leq 45dB (Lmax 기준 없음)
-- 공기전달 야간(22~06시): Leq 40dB (Lmax 기준 없음)
-- Lmax 기준은 1시간에 3회 이상 초과 시 기준 초과로 판정
-- 측정 방식: 직접충격은 1분 Leq, 공기전달은 5분 Leq
-
-[신고 절차 - 6단계]
-1단계: 관리사무소 신고
-  → 층간소음 발생 사실을 관리사무소에 알리고 중단·차단 조치 권고 요청
-  → 근거: 공동주택관리법 제20조 제2항
-2단계: 이웃사이센터 전화상담
-  → 1661-2642 (평일 09:00~18:00) / 무료
-3단계: 방문상담 신청
-  → floor.noiseinfo.or.kr 또는 콜센터로 접수
-  → 상대 세대에 안내문 우편 발송 후 양 세대 방문상담
-4단계: 소음측정 신청
-  → 전문가 현장 방문 측정 후 측정결과서 발급 가능
-5단계: 분쟁조정 신청
-  → 환경분쟁조정위원회 또는 중앙 공동주택관리 분쟁조정위원회
-6단계: 법적 소송
-  → 민사상 손해배상 청구 가능 (민법 제214조·제750조)
-
-[신고 기관]
-- 이웃사이센터: 1661-2642 / floor.noiseinfo.or.kr / 평일 09~18시 / 무료
-- 구청 환경과: 공사소음 등 층간소음 외 소음
-- 환경분쟁조정위원회: 최종 단계
-- 법률구조공단: 132 / 법적 소송 관련 무료 법률 지원
-"""
+import faiss
+import numpy as np
+import pickle
+from sentence_transformers import SentenceTransformer
 
 # =============================================
-# 나중에 FAISS 연결되면 아래 함수로 교체
+# FAISS 기반 법령 검색 모듈
+# chatbot.py, generate_report.py 둘 다 여기서 법령 가져감
 # =============================================
-# def get_legal_info(query):
-#     results = faiss_search(query)
-#     return "\n".join(results)
+
+_model = None
+_index = None
+_chunks = None
+
+def _load():
+    global _model, _index, _chunks
+    if _model is None:
+        _model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+        _index = faiss.read_index("legal_data/legal_index.faiss")
+        with open("legal_data/legal_chunks_meta.pkl", "rb") as f:
+            _chunks = pickle.load(f)
+
+def search_legal(query, top_k=3):
+    _load()
+    query_vector = _model.encode([query]).astype("float32")
+    distances, indices = _index.search(query_vector, top_k)
+    results = []
+    for idx in indices[0]:
+        results.append(_chunks[idx]["content"])
+    return "\n\n".join(results)
