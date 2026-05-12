@@ -45,17 +45,19 @@ async def create_noise_record(
     is_exceeded = leq_exceeded or lmax_exceeded
 
     record = {
-        "email": email,
-        "db_value": noise.leq,
-        "leq": noise.leq,
-        "lmax": noise.lmax,
-        "noise_type": noise.noise_type,
-        "time_zone": time_zone,
-        "leq_standard": leq_standard,
-        "lmax_standard": lmax_standard,
-        "is_exceeded": is_exceeded,
-        "measured_at": now
-    }
+    "email": email,
+    "leq": noise.leq,
+    "lmax": noise.lmax,
+    "noise_type": noise.noise_type,
+    "primary_source": noise.primary_source,    # 추가
+    "secondary_source": noise.secondary_source, # 추가
+    "time_zone": time_zone,
+    "leq_standard": leq_standard,
+    "lmax_standard": lmax_standard,
+    "is_exceeded": is_exceeded,
+    "measured_at": now
+}
+
 
     result = await noise_collection.insert_one(record)
 
