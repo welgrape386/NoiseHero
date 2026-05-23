@@ -1,29 +1,16 @@
 /**
  * NoiseGuard API Service
- * Base URL: http://127.0.0.1:8000
+ *
+ * Frontend: https://noise-on.vercel.app
+ * Backend API: https://noisehero.onrender.com
  *
  * 실제 서버 엔드포인트와 통신하는 모든 API 함수를 이 파일에서 관리합니다.
- *
- * 개발 모드: localStorage에 'dev_mode=true' 설정 시 서버 없이 작동
  */
-// 환경에 따라 API URL 자동 전환
-export const BASE_URL = import.meta.env.VITE_API_URL ||
-  (import.meta.env.DEV
-    ? 'http://127.0.0.1:8000'  // 로컬 개발
-    : 'https://your-api.vercel.app');  // 프로덕션
 
-// 개발 모드 확인
-export function isDevMode(): boolean {
-  return localStorage.getItem('dev_mode') === 'true';
-}
+/// <reference types="vite/client" />
 
-export function setDevMode(enabled: boolean) {
-  if (enabled) {
-    localStorage.setItem('dev_mode', 'true');
-  } else {
-    localStorage.removeItem('dev_mode');
-  }
-}
+export const BASE_URL =
+  import.meta.env.VITE_API_URL || 'https://noisehero.onrender.com';
 
 // ─── Token Helpers ──────────────────────────────────────────────────────────
 
@@ -41,27 +28,49 @@ export function clearAuth() {
 }
 
 function jsonHeaders(auth = false): HeadersInit {
-  const h: Record<string, string> = { 'Content-Type': 'application/json' };
+  const h: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
   if (auth) {
     const token = getToken();
-    if (token) h['Authorization'] = `Bearer ${token}`;
+    if (token) h.Authorization = `Bearer ${token}`;
   }
+
   return h;
 }
 
 /** API 오류를 처리하고, 서버 detail 메시지를 추출합니다 */
 async function handleResponse<T>(res: Response): Promise<T> {
-  const data = await res.json();
+  let data: unknown = null;
+
+  try {
+    data = await res.json();
+  } catch {
+    data = null;
+  }
+
   if (!res.ok) {
-    // FastAPI는 주로 { detail: "..." } 형식으로 오류를 반환
+    const detail = data && typeof data === 'object' && 'detail' in data
+      ? (data as { detail?: unknown }).detail
+      : null;
+
     const msg =
-      typeof data.detail === 'string'
-        ? data.detail
-        : Array.isArray(data.detail)
-        ? data.detail.map((d: { msg: string }) => d.msg).join(', ')
-        : '요청에 실패했습니다.';
+      typeof detail === 'string'
+        ? detail
+        : Array.isArray(detail)
+          ? detail
+              .map((d) =>
+                typeof d === 'object' && d !== null && 'msg' in d
+                  ? String((d as { msg: unknown }).msg)
+                  : String(d)
+              )
+              .join(', ')
+          : '요청에 실패했습니다.';
+
     throw new Error(msg);
   }
+
   return data as T;
 }
 
@@ -91,204 +100,170 @@ export interface UserInfo {
   dong: string;
   ho: string;
   floor: number;
+
+  building_company?: string;
+  slab_thickness?: string;
+  structure?: string;
+  committee?: string;
+  management_office?: string;
+  management_phone?: string;
 }
 
-// ─── Noise Types ─────────────────────────────────────────────────────────────
+// ─── Noise Types ────────────────────────────────────────────────────────────
 
 export interface NoiseRecord {
   _id: string;
   email: string;
   leq: number;
   lmax: number;
-  noise_type: string;       // '직접충격' | '공기전달'
-  time_zone: string;        // '주간' | '야간'
+  noise_type: string;
+  primary_source?: string;
+  secondary_source?: string;
+  time_zone: string;
   leq_standard: number;
-  lmax_standard: number;    // 공기전달은 0 (미적용)
+  lmax_standard: number | null;
   is_exceeded: boolean;
-  measured_at: string;      // ISO 8601
+  measured_at: string;
 }
 
-// ─── Auth API ────────────────────────────────────────────────────────────────
-
-/** POST /auth/login */
-export async function apiLogin(email: string, password: string): Promise<LoginResponse> {
-  // 개발 모드
-  if (isDevMode()) {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    if (email && password.length >= 6) {
-      return {
-        message: '로그인 성공',
-        access_token: 'dev_mock_token_' + Date.now(),
-        token_type: 'bearer',
-      };
-    }
-    throw new Error('이메일 또는 비밀번호가 올바르지 않습니다.');
-  }
-
-  // 실제 API 호출
-  try {
-    const res = await fetch(`${BASE_URL}/auth/login`, {
-      method: 'POST',
-      headers: jsonHeaders(),
-      body: JSON.stringify({ email, password }),
-    });
-    return handleResponse<LoginResponse>(res);
-  } catch (err) {
-    console.error('API 호출 실패:', err);
-    throw new Error('서버에 연결할 수 없습니다. API 서버가 실행 중인지 확인해주세요.');
-  }
-}
+// ─── Auth API ───────────────────────────────────────────────────────────────
 
 /** POST /auth/signup */
-export async function apiSignup(body: SignupRequest): Promise<{ message: string; email: string }> {
-  // 개발 모드
-  if (isDevMode()) {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    const existingUser = localStorage.getItem('dev_user_' + body.email);
-    if (existingUser) {
-      throw new Error('이미 사용 중인 이메일입니다.');
-    }
-    localStorage.setItem('dev_user_' + body.email, JSON.stringify(body));
-    return { message: '회원가입 성공', email: body.email };
-  }
+export async function apiSignup(
+  body: SignupRequest
+): Promise<{ message: string; email: string }> {
+  const res = await fetch(`${BASE_URL}/auth/signup`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
 
-  // 실제 API 호출
-  try {
-    const res = await fetch(`${BASE_URL}/auth/signup`, {
-      method: 'POST',
-      headers: jsonHeaders(),
-      body: JSON.stringify(body),
-    });
-    return handleResponse(res);
-  } catch (err) {
-    console.error('API 호출 실패:', err);
-    throw new Error('서버에 연결할 수 없습니다. API 서버가 실행 중인지 확인해주세요.');
-  }
+  return handleResponse<{ message: string; email: string }>(res);
 }
 
-/** GET /auth/me — 내 정보 조회 */
-export async function apiGetMe(): Promise<UserInfo> {
-  // 개발 모드
-  if (isDevMode()) {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    const user = localStorage.getItem('noise_user');
-    if (user) {
-      const parsed = JSON.parse(user);
-      return {
-        message: '사용자 정보 조회 성공',
-        email: parsed.email || 'dev@example.com',
-        nickname: parsed.nickname || '개발자',
-        apartment_name: parsed.apartment_name || '테스트 아파트',
-        dong: parsed.dong || '101',
-        ho: parsed.ho || '101',
-        floor: parsed.floor || 1,
-      };
-    }
-    throw new Error('인증 정보가 없습니다.');
+/** POST /auth/login */
+export async function apiLogin(
+  email: string,
+  password: string
+): Promise<LoginResponse> {
+  const res = await fetch(`${BASE_URL}/auth/login`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({ email, password }),
+  });
+
+  const data = await handleResponse<LoginResponse>(res);
+
+  if (data.access_token) {
+    setToken(data.access_token);
   }
 
-  // 실제 API 호출
+  return data;
+}
+
+/** GET /auth/me */
+export async function apiGetMe(): Promise<UserInfo> {
   const res = await fetch(`${BASE_URL}/auth/me`, {
+    method: 'GET',
     headers: jsonHeaders(true),
   });
+
   return handleResponse<UserInfo>(res);
 }
 
-// ─── Noise API ───────────────────────────────────────────────────────────────
+/** PATCH /auth/me */
+export async function apiUpdateMe(body: {
+  nickname?: string;
+  apartment_name?: string;
+  dong?: string;
+  ho?: string;
+  floor?: number;
+  building_company?: string;
+  slab_thickness?: string;
+  structure?: string;
+  committee?: string;
+  management_office?: string;
+  management_phone?: string;
+}): Promise<UserInfo> {
+  const res = await fetch(`${BASE_URL}/auth/me`, {
+    method: 'PATCH',
+    headers: jsonHeaders(true),
+    body: JSON.stringify(body),
+  });
 
-/** POST /noise/measure — 측정 데이터 저장 */
+  return handleResponse<UserInfo>(res);
+}
+
+// ─── Noise API ──────────────────────────────────────────────────────────────
+
+/** POST /noise/measure */
 export async function apiSaveMeasure(
   leq: number,
   lmax: number,
-  noise_type: '직접충격' | '공기전달'
+  noise_type: '직접충격' | '공기전달',
+  primary_source = '미분류',
+  secondary_source = '없음'
 ): Promise<NoiseRecord> {
-  // 개발 모드
-  if (isDevMode()) {
-    await new Promise(resolve => setTimeout(resolve, 400));
-    const night = isNighttime();
-    const time_zone = night ? '야간' : '주간';
-    const zone = night ? 'nighttime' : 'daytime';
-    const std = LEGAL_STANDARDS[noise_type === '직접충격' ? 'impact' : 'airborne'][zone];
-
-    const record: NoiseRecord = {
-      _id: 'dev_' + Date.now(),
-      email: JSON.parse(localStorage.getItem('noise_user') || '{}').email || 'dev@example.com',
-      leq,
-      lmax,
-      noise_type,
-      time_zone,
-      leq_standard: std.leq,
-      lmax_standard: std.lmax || 0,
-      is_exceeded: leq > std.leq || (std.lmax !== null && lmax > std.lmax),
-      measured_at: new Date().toISOString(),
-    };
-
-    // localStorage에 저장
-    const history = JSON.parse(localStorage.getItem('dev_noise_history') || '[]');
-    history.unshift(record);
-    localStorage.setItem('dev_noise_history', JSON.stringify(history.slice(0, 100)));
-
-    return record;
-  }
-
-  // 실제 API 호출
   const res = await fetch(`${BASE_URL}/noise/measure`, {
     method: 'POST',
     headers: jsonHeaders(true),
-    body: JSON.stringify({ leq, lmax, noise_type }),
+    body: JSON.stringify({
+      leq,
+      lmax,
+      noise_type,
+      primary_source,
+      secondary_source,
+    }),
   });
-  const data = await handleResponse<{ message: string; record: NoiseRecord }>(res);
+
+  const data = await handleResponse<{
+    message: string;
+    record: NoiseRecord;
+  }>(res);
+
   return data.record;
 }
 
-/** GET /noise/history — 측정 이력 조회 */
+/** GET /noise/history */
 export async function apiGetHistory(): Promise<NoiseRecord[]> {
-  // 개발 모드
-  if (isDevMode()) {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    const history = JSON.parse(localStorage.getItem('dev_noise_history') || '[]');
-    return history;
-  }
-
-  // 실제 API 호출
   const res = await fetch(`${BASE_URL}/noise/history`, {
+    method: 'GET',
     headers: jsonHeaders(true),
   });
+
   const data = await handleResponse<{ history: NoiseRecord[] }>(res);
+
   return data.history;
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
-/** 법적 기준 — API 명세 기반 */
 export const LEGAL_STANDARDS = {
   impact: {
-    daytime:  { leq: 39, lmax: 57 },
+    daytime: { leq: 39, lmax: 57 },
     nighttime: { leq: 34, lmax: 52 },
   },
   airborne: {
-    daytime:  { leq: 45, lmax: null },
+    daytime: { leq: 45, lmax: null },
     nighttime: { leq: 40, lmax: null },
   },
 } as const;
 
-/** 현재 시간이 야간(22시~06시)인지 판별 */
 export function isNighttime(): boolean {
   const h = new Date().getHours();
   return h >= 22 || h < 6;
 }
 
-/** ISO 날짜를 한국 형식으로 포맷 (예: 5/7 23:14) */
 export function formatMeasuredAt(isoStr: string): string {
   const d = new Date(isoStr);
   const month = d.getMonth() + 1;
   const day = d.getDate();
   const hh = String(d.getHours()).padStart(2, '0');
   const mm = String(d.getMinutes()).padStart(2, '0');
+
   return `${month}/${day} ${hh}:${mm}`;
 }
 
-/** NoiseRecord → 화면에서 사용하는 HistoryItem으로 변환 */
 export interface HistoryItem {
   id: string;
   time: string;
@@ -298,7 +273,9 @@ export interface HistoryItem {
   period: string;
   over: boolean;
   leq_standard: number;
-  lmax_standard: number;
+  lmax_standard: number | null;
+  primary_source?: string;
+  secondary_source?: string;
 }
 
 export function mapRecord(r: NoiseRecord): HistoryItem {
@@ -312,46 +289,7 @@ export function mapRecord(r: NoiseRecord): HistoryItem {
     over: r.is_exceeded,
     leq_standard: r.leq_standard,
     lmax_standard: r.lmax_standard,
+    primary_source: r.primary_source,
+    secondary_source: r.secondary_source,
   };
-}
-
-/** PATCH /auth/me — 내 정보 수정 */
-export async function apiUpdateMe(body: {
-  nickname?: string;
-  apartment_name?: string;
-  dong?: string;
-  ho?: string;
-  floor?: number;
-}): Promise<UserInfo> {
-
-  // 개발 모드
-  if (isDevMode()) {
-    const current = JSON.parse(localStorage.getItem('noise_user') || '{}');
-
-    const updated = {
-      ...current,
-      ...body,
-    };
-
-    localStorage.setItem('noise_user', JSON.stringify(updated));
-
-    return {
-      message: '수정 완료',
-      email: updated.email,
-      nickname: updated.nickname || '',
-      apartment_name: updated.apartment_name || '',
-      dong: updated.dong || '',
-      ho: updated.ho || '',
-      floor: updated.floor || 0,
-    };
-  }
-
-  // 실제 서버 요청
-  const res = await fetch(`${BASE_URL}/auth/me`, {
-    method: 'PATCH',
-    headers: jsonHeaders(true),
-    body: JSON.stringify(body),
-  });
-
-  return handleResponse<UserInfo>(res);
 }
