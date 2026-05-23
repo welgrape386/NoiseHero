@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Background } from '../components/Background';
-import { Eye, EyeOff, Lock, Mail, Code } from 'lucide-react';
-import { apiLogin, apiGetMe, setToken, isDevMode, setDevMode } from '../services/api';
+import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
+import { apiLogin, apiGetMe, setToken } from './services/api';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -11,7 +11,6 @@ export function LoginPage() {
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [devMode, setDevModeState] = useState(isDevMode());
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
