@@ -224,3 +224,16 @@ function formatDateTime(value?: string) {
     minute: '2-digit',
   });
 }
+
+export const LEGAL_STANDARDS = {
+  직접충격: {
+    주간: { leq: 39, lmax: 57 },
+    야간: { leq: 34, lmax: 52 },
+  },
+  공기전달: {
+    주간: { leq: 45, lmax: null },
+    야간: { leq: 40, lmax: null },
+  },
+};
+
+export const apiSaveMeasure = apiCreateMeasure;
