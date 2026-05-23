@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from database import db
 from routes.auth import router as auth_router
 from routes.noise import router as noise_router
@@ -7,6 +8,14 @@ from routes.agency import router as agency_router
 from routes.chatbot import router as chatbot_router
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(auth_router, prefix="/auth")
 app.include_router(noise_router, prefix="/noise")
