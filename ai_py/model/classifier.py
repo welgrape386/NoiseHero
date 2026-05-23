@@ -1,6 +1,7 @@
 import joblib
 import numpy as np
 import librosa
+import json
 
 def extract_features(filename):
     y, sr = librosa.load(filename)
@@ -19,4 +20,25 @@ def classify(filename, model_path="svm_model.pkl", scaler_path="scaler.pkl"):
     scaler = joblib.load(scaler_path)
     features = extract_features(filename)
     scaled = scaler.transform([features])
-    return model.predict(scaled)[0]
+    result = model.predict(scaled)[0]
+
+    if result == "직접충격음":
+        return {
+            "noise_type": "직접충격",
+            "description": "발소리, 뛰는 소리, 가구 끄는 소리",
+            "legal_standard": {
+                "주간_leq": 39,
+                "주간_lmax": 57,
+                "야간_leq": 34,
+                "야간_lmax": 52
+            }
+        }
+    else:
+        return {
+            "noise_type": "공기전달",
+            "description": "TV 소리, 음향기기, 악기 소리",
+            "legal_standard": {
+                "주간_leq": 45,
+                "야간_leq": 40
+            }
+        }
