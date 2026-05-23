@@ -51,10 +51,12 @@ export type UserUpdateRequest = Partial<{
   management_phone: string;
 }>;
 
+export type NoiseType = '직접충격' | '공기전달';
+
 export type NoiseMeasureRequest = {
   leq: number;
   lmax: number;
-  noise_type: '직접충격' | '공기?�달';
+  noise_type: NoiseType;
   primary_source?: string;
   secondary_source?: string;
 };
@@ -107,10 +109,13 @@ async function request<T>(
 ): Promise<T> {
   const token = getToken();
 
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(options.headers || {}),
   };
+
+  if (options.headers) {
+    Object.assign(headers, options.headers);
+  }
 
   if (token) {
     headers.Authorization = `Bearer ${token}`;
@@ -134,7 +139,7 @@ async function request<T>(
       data?.detail ||
       data?.error ||
       data?.message ||
-      `API ?�청 ?�패 (${res.status})`;
+      `API 요청 실패 (${res.status})`;
 
     throw new Error(message);
   }
@@ -182,6 +187,32 @@ export async function apiCreateMeasure(payload: NoiseMeasureRequest) {
   });
 }
 
+export async function apiSaveMeasure(data: {
+  measure_type?: string;
+  value?: number;
+  leq?: number;
+  lmax?: number;
+  measured_at?: string;
+  is_violation?: boolean;
+  memo?: string;
+  noise_type?: NoiseType;
+  primary_source?: string;
+  secondary_source?: string;
+}) {
+  return request<{ message: string; record: NoiseRecord }>('/noise/measure', {
+    method: 'POST',
+    body: JSON.stringify({
+      leq: data.leq ?? data.value ?? 0,
+      lmax: data.lmax ?? data.value ?? 0,
+      noise_type:
+        data.noise_type ??
+        (data.measure_type === 'airborne' ? '공기전달' : '직접충격'),
+      primary_source: data.primary_source,
+      secondary_source: data.secondary_source,
+    }),
+  });
+}
+
 export async function apiGetHistory() {
   const res = await request<{ history: NoiseRecord[] }>('/noise/history');
   return res.history || [];
@@ -226,14 +257,14 @@ function formatDateTime(value?: string) {
 }
 
 export const LEGAL_STANDARDS = {
-  직접충격: {
-    주간: { leq: 39, lmax: 57 },
-    ?�간: { leq: 34, lmax: 52 },
-  },
-  공기?�달: {
-    주간: { leq: 45, lmax: null },
-    ?�간: { leq: 40, lmax: null },
+  공동주택: {
+    직접충격: {
+      주간: { leq: 39, lmax: 57 },
+      야간: { leq: 34, lmax: 52 },
+    },
+    공기전달: {
+      주간: { leq: 45, lmax: 57 },
+      야간: { leq: 40, lmax: 52 },
+    },
   },
 };
-
-export const apiSaveMeasure = apiCreateMeasure;

@@ -27,21 +27,21 @@ export function RegisterPage() {
   function handleStep1(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-    if (!email) return setError('?�메?�을 ?�력?�주?�요.');
-    if (!email.includes('@')) return setError('?�바�??�메???�식???�닙?�다.');
-    if (!password || password.length < 6) return setError('비�?번호??6???�상?�어???�니??');
-    if (password !== pwConfirm) return setError('비�?번호가 ?�치?��? ?�습?�다.');
+    if (!email) return setError('이메일을 입력해주세요.');
+    if (!email.includes('@')) return setError('올바른 이메일 형식이 아닙니다.');
+    if (!password || password.length < 6) return setError('비밀번호는 6자 이상이어야 합니다.');
+    if (password !== pwConfirm) return setError('비밀번호가 일치하지 않습니다.');
     setStep(2);
   }
 
   async function handleStep2(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-    if (!nickname) return setError('?�네?�을 ?�력?�주?�요.');
+    if (!nickname) return setError('닉네임을 입력해주세요.');
 
     setLoading(true);
     try {
-      // 1. ?�원가??API ?�출
+      // 1. 회원가입 API 호출
       await apiSignup({
         email,
         password,
@@ -52,11 +52,11 @@ export function RegisterPage() {
         ...(floor && !isNaN(Number(floor)) && { floor: Number(floor) }),
       });
 
-      // 2. ?�동 로그????access_token 취득
+      // 2. 자동 로그인 → access_token 취득
       const loginRes = await apiLogin(email, password);
       setToken(loginRes.access_token);
 
-      // 3. ???�보 ?�??
+      // 3. 내 정보 저장
       try {
         const me = await apiGetMe();
         localStorage.setItem(
@@ -76,8 +76,8 @@ export function RegisterPage() {
 
       navigate('/home');
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : '?�원가?�에 ?�패?�습?�다.';
-      setError(msg.includes('?��?') ? '?��? ?�용 중인 ?�메?�입?�다.' : msg);
+      const msg = err instanceof Error ? err.message : '회원가입에 실패했습니다.';
+      setError(msg.includes('이미') ? '이미 사용 중인 이메일입니다.' : msg);
     } finally {
       setLoading(false);
     }
@@ -141,10 +141,10 @@ export function RegisterPage() {
             fontFamily: "'Space Grotesk', sans-serif",
             fontSize: 22, fontWeight: 700, color: '#0A1866',
           }}>
-            ?�음<span style={{ color: '#1A3BDB' }}>ON</span> ?�원가??
+            소음<span style={{ color: '#1A3BDB' }}>ON</span> 회원가입
           </div>
           <div style={{ fontSize: 12, color: '#7A8AB8', marginTop: 4 }}>
-            {step === 1 ? '계정 ?�보�??�력?�주?�요' : '?�로???�보�??�정?�주?�요'}
+            {step === 1 ? '계정 정보를 입력해주세요' : '프로필 정보를 설정해주세요'}
           </div>
 
           {/* Step indicator */}
@@ -176,17 +176,17 @@ export function RegisterPage() {
           {step === 1 ? (
             <>
               <div style={{ fontSize: 15, fontWeight: 700, color: '#0A1866', fontFamily: "'Space Grotesk', sans-serif", marginBottom: 4 }}>
-                계정 ?�보
+                계정 정보
               </div>
 
               <div style={{ position: 'relative' }}>
                 <Mail size={16} color="#7A8AB8" style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }} />
-                <input type="email" placeholder="?�메??주소" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} />
+                <input type="email" placeholder="이메일 주소" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} />
               </div>
 
               <div style={{ position: 'relative' }}>
                 <Lock size={16} color="#7A8AB8" style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }} />
-                <input type={showPw ? 'text' : 'password'} placeholder="비�?번호 (6???�상)" value={password} onChange={e => setPassword(e.target.value)} style={{ ...inputStyle, paddingRight: 44 }} />
+                <input type={showPw ? 'text' : 'password'} placeholder="비밀번호 (6자 이상)" value={password} onChange={e => setPassword(e.target.value)} style={{ ...inputStyle, paddingRight: 44 }} />
                 <button type="button" onClick={() => setShowPw(v => !v)} style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                   {showPw ? <EyeOff size={16} color="#7A8AB8" /> : <Eye size={16} color="#7A8AB8" />}
                 </button>
@@ -194,22 +194,22 @@ export function RegisterPage() {
 
               <div style={{ position: 'relative' }}>
                 <Lock size={16} color="#7A8AB8" style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }} />
-                <input type="password" placeholder="비�?번호 ?�인" value={pwConfirm} onChange={e => setPwConfirm(e.target.value)} style={inputStyle} />
+                <input type="password" placeholder="비밀번호 확인" value={pwConfirm} onChange={e => setPwConfirm(e.target.value)} style={inputStyle} />
               </div>
             </>
           ) : (
             <>
               <div style={{ fontSize: 15, fontWeight: 700, color: '#0A1866', fontFamily: "'Space Grotesk', sans-serif", marginBottom: 4 }}>
-                ?�로???�보
+                프로필 정보
               </div>
 
-              {/* ?�네??(?�수) */}
+              {/* 닉네임 (필수) */}
               <div style={{ position: 'relative' }}>
                 <User size={16} color="#7A8AB8" style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }} />
-                <input type="text" placeholder="?�네??*" value={nickname} onChange={e => setNickname(e.target.value)} style={inputStyle} />
+                <input type="text" placeholder="닉네임 *" value={nickname} onChange={e => setNickname(e.target.value)} style={inputStyle} />
               </div>
 
-              {/* ?�파???�보 (?�택) */}
+              {/* 아파트 정보 (선택) */}
               <div style={{
                 padding: '14px 16px 10px',
                 borderRadius: 14,
@@ -219,12 +219,12 @@ export function RegisterPage() {
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
                   <Building size={14} color="#7A8AB8" />
-                  <span style={{ fontSize: 11, fontWeight: 600, color: '#7A8AB8' }}>?�파???�보 (?�택)</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: '#7A8AB8' }}>아파트 정보 (선택)</span>
                 </div>
 
                 <input
                   type="text"
-                  placeholder="?�파?�명 (?? ?��????�파??"
+                  placeholder="아파트명 (예: 래미안 아파트)"
                   value={apartmentName}
                   onChange={e => setApartmentName(e.target.value)}
                   style={inputNoIconStyle}
@@ -233,14 +233,14 @@ export function RegisterPage() {
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input
                     type="text"
-                    placeholder="??
+                    placeholder="동"
                     value={dong}
                     onChange={e => setDong(e.target.value)}
                     style={{ ...inputNoIconStyle, flex: 1 }}
                   />
                   <input
                     type="text"
-                    placeholder="?�수"
+                    placeholder="호수"
                     value={ho}
                     onChange={e => setHo(e.target.value)}
                     style={{ ...inputNoIconStyle, flex: 1 }}
@@ -256,7 +256,7 @@ export function RegisterPage() {
               </div>
 
               <div style={{ fontSize: 11, color: '#7A8AB8', padding: '2px 4px' }}>
-                ?�파???�보??마이?�이지?�서???�정?????�습?�다.
+                아파트 정보는 마이페이지에서도 수정할 수 있습니다.
               </div>
             </>
           )}
@@ -281,18 +281,18 @@ export function RegisterPage() {
               marginTop: 4,
             }}
           >
-            {loading ? '처리 �?..' : step === 1 ? '?�음 ?�계' : '?�원가???�료'}
+            {loading ? '처리 중...' : step === 1 ? '다음 단계' : '회원가입 완료'}
           </button>
         </form>
 
         {step === 1 && (
           <div style={{ marginTop: 20, textAlign: 'center' }}>
-            <span style={{ fontSize: 13, color: '#7A8AB8' }}>?��? 계정???�으?��??? </span>
+            <span style={{ fontSize: 13, color: '#7A8AB8' }}>이미 계정이 있으신가요? </span>
             <button
               onClick={() => navigate('/login')}
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1A3BDB', fontSize: 13, fontWeight: 600, padding: 0 }}
             >
-              로그??
+              로그인
             </button>
           </div>
         )}

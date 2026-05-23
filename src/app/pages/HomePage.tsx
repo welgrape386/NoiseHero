@@ -40,23 +40,23 @@ export function HomePage() {
   const today = new Date();
   const dateStr = today.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
   const night = isNighttime();
-  const timeLabel = night ? '?�간' : '주간';
+  const timeLabel = night ? '야간' : '주간';
 
   const [history, setHistory] = useState<HistoryItem[]>([]);
 
   useEffect(() => {
     apiGetHistory()
       .then(records => setHistory(records.map(mapRecord)))
-      .catch(() => {}); // ?�류 ??�??�력 ?��?
+      .catch(() => {}); // 오류 시 빈 이력 유지
   }, []);
 
-  // 최근 7???�계 계산
+  // 최근 7일 통계 계산
   const now = Date.now();
   const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
-  const recent = history; // API가 ?��? 최근?�으�?반환
+  const recent = history; // API가 이미 최근순으로 반환
   const recentWeek = recent.filter(i => {
-    // measured_at 기반?�로 ?�터?�고 ?��?�?HistoryItem?� time(문자??�??�음
-    // ???�체 ?�력 ?�용 (간소??
+    // measured_at 기반으로 필터하고 싶지만 HistoryItem은 time(문자열)만 있음
+    // → 전체 이력 사용 (간소화)
     return true;
   });
 
@@ -65,12 +65,12 @@ export function HomePage() {
   const avgDb = totalCount > 0
     ? Math.round(recentWeek.reduce((a, i) => a + i.db, 0) / totalCount * 10) / 10
     : 0;
-  const nightOverCount = recentWeek.filter(i => i.over && i.period === '?�간').length;
+  const nightOverCount = recentWeek.filter(i => i.over && i.period === '야간').length;
 
-  // 최근 측정�?(�?번째 ?�력)
+  // 최근 측정값 (첫 번째 이력)
   const latest = history[0];
 
-  // 최근 3개만 ?�에 ?�시
+  // 최근 3개만 홈에 표시
   const recentThree = history.slice(0, 3);
 
   return (
@@ -82,7 +82,7 @@ export function HomePage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
           <div>
             <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 22, fontWeight: 700, color: '#0A1866' }}>
-              ?�음<span style={{ color: '#1A3BDB' }}>ON</span>
+              소음<span style={{ color: '#1A3BDB' }}>ON</span>
             </div>
             <div style={{ marginTop: 4, fontSize: 11, color: '#9AA6C0', fontWeight: 600 }}>{dateStr}</div>
           </div>
@@ -101,7 +101,7 @@ export function HomePage() {
 
         {/* Main Card */}
         <GlassCard style={{ marginTop: 12 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#8C98B8', marginBottom: 8 }}>최근 측정�?/div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#8C98B8', marginBottom: 8 }}>최근 측정값</div>
 
           {latest ? (
             <>
@@ -120,15 +120,15 @@ export function HomePage() {
                 }}>
                   <div style={{ width: 6, height: 6, background: latest.over ? '#D93025' : '#1A3BDB', borderRadius: '50%' }} />
                   {latest.over
-                    ? `기�? 초과 (+${Math.round((latest.db - (latest.leq_standard ?? 39)) * 10) / 10} dB)`
-                    : '?�상 범위'}
+                    ? `기준 초과 (+${Math.round((latest.db - (latest.leq_standard ?? 39)) * 10) / 10} dB)`
+                    : '정상 범위'}
                 </div>
                 <div style={{ fontSize: 11, color: '#9AA6C0' }}>{latest.type} · {latest.period}</div>
               </div>
 
               <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
                 {[
-                  { label: 'Leq ?�균', val: latest.db, pct: Math.min(latest.db, 100) },
+                  { label: 'Leq 평균', val: latest.db, pct: Math.min(latest.db, 100) },
                   { label: 'Lmax 최고', val: latest.lmax, pct: Math.min(latest.lmax, 100) },
                 ].map(item => (
                   <div key={item.label} style={{
@@ -151,43 +151,43 @@ export function HomePage() {
             </>
           ) : (
             <div style={{ paddingTop: 12, paddingBottom: 8, fontSize: 13, color: '#9AA6C0', textAlign: 'center' }}>
-              ?�직 측정 ?�력???�습?�다.
+              아직 측정 이력이 없습니다.
             </div>
           )}
         </GlassCard>
 
         {/* Weekly Stats */}
-        <div style={{ marginTop: 26, marginBottom: 12, fontSize: 14, fontWeight: 600, color: '#8C98B8' }}>?�적 ?�계</div>
+        <div style={{ marginTop: 26, marginBottom: 12, fontSize: 14, fontWeight: 600, color: '#8C98B8' }}>누적 통계</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           {[
             {
               icon: <AlertTriangle size={16} color="#C0271E" />,
               bg: 'rgba(217,48,37,0.1)',
-              label: '초과 ?�수',
+              label: '초과 횟수',
               val: overCount, valColor: '#C0271E',
-              sub: '법적 기�? 초과',
+              sub: '법적 기준 초과',
             },
             {
               icon: <Calendar size={16} color="#1A3BDB" />,
               bg: 'rgba(26,59,219,0.1)',
-              label: '�?측정 ?�수',
+              label: '총 측정 횟수',
               val: totalCount, valColor: '#0A1A8C',
-              sub: '?�체 ?�력',
+              sub: '전체 이력',
             },
             {
               icon: <Activity size={16} color="#1A3BDB" />,
               bg: 'rgba(26,59,219,0.1)',
-              label: '?�균 ?�음',
+              label: '평균 소음',
               val: avgDb, valColor: '#0A1A8C',
-              sub: 'Leq ?�균',
+              sub: 'Leq 평균',
               unit: 'dB',
             },
             {
               icon: <Moon size={16} color="#1A3BDB" />,
               bg: 'rgba(26,59,219,0.1)',
-              label: '?�간 초과',
+              label: '야간 초과',
               val: nightOverCount, valColor: '#C0271E',
-              sub: '?�간 기�? 초과',
+              sub: '야간 기준 초과',
             },
           ].map((stat, i) => (
             <GlassCardSm key={i} style={{ padding: 16, position: 'relative', overflow: 'hidden' }}>
@@ -205,7 +205,7 @@ export function HomePage() {
         </div>
 
         {/* Recent History */}
-        <div style={{ marginTop: 26, marginBottom: 12, fontSize: 14, fontWeight: 600, color: '#8C98B8' }}>최근 ?�력</div>
+        <div style={{ marginTop: 26, marginBottom: 12, fontSize: 14, fontWeight: 600, color: '#8C98B8' }}>최근 이력</div>
         {recentThree.length > 0 ? (
           <GlassCardSm style={{ padding: '8px 16px' }}>
             {recentThree.map((item, idx) => (
@@ -232,15 +232,15 @@ export function HomePage() {
                   background: item.over ? 'rgba(217,48,37,0.1)' : 'rgba(26,59,219,0.08)',
                   color: item.over ? '#C0271E' : '#1A3BDB',
                 }}>
-                  {item.over ? '초과' : '?�상'}
+                  {item.over ? '초과' : '정상'}
                 </div>
               </div>
             ))}
           </GlassCardSm>
         ) : (
           <GlassCardSm style={{ padding: '20px 16px', textAlign: 'center' }}>
-            <div style={{ fontSize: 13, color: '#9AA6C0' }}>?�직 측정 ?�력???�습?�다.</div>
-            <div style={{ fontSize: 11, color: '#B0B8D0', marginTop: 4 }}>측정???�작?�보?�요!</div>
+            <div style={{ fontSize: 13, color: '#9AA6C0' }}>아직 측정 이력이 없습니다.</div>
+            <div style={{ fontSize: 11, color: '#B0B8D0', marginTop: 4 }}>측정을 시작해보세요!</div>
           </GlassCardSm>
         )}
 
@@ -259,7 +259,7 @@ export function HomePage() {
           }}
         >
           <Mic size={18} color="#fff" />
-          즉시 측정 ?�작
+          즉시 측정 시작
         </button>
       </div>
 
