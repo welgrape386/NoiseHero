@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate } from 'react-router-dom';
 import { Background } from '../components/Background';
 import { TabBar } from '../components/TabBar';
 import { ChevronLeft, AlertTriangle, Save, Square, CheckCircle, Mic } from 'lucide-react';
@@ -8,7 +8,7 @@ import { apiSaveMeasure, LEGAL_STANDARDS, isNighttime } from '../services/api';
 type MeasureType = 'impact' | 'airborne';
 type MeasureState = 'idle' | 'measuring' | 'done';
 
-/** Web Audio API로 실시간 dB 측정 */
+/** Web Audio API�??�시�?dB 측정 */
 class MicrophoneAnalyzer {
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
@@ -17,7 +17,7 @@ class MicrophoneAnalyzer {
   private stream: MediaStream | null = null;
   private rafId: number | null = null;
   private onUpdate: ((db: number) => void) | null = null;
-  private calibrationOffset = 0; // 마이크 보정값
+  private calibrationOffset = 0; // 마이??보정�?
 
   async start(onUpdate: (db: number) => void, calibrationOffset = 0) {
     this.onUpdate = onUpdate;
@@ -43,8 +43,8 @@ class MicrophoneAnalyzer {
       this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
       this.analyze();
     } catch (err) {
-      console.error('마이크 접근 실패:', err);
-      throw new Error('마이크 권한이 거부되었습니다.');
+      console.error('마이???�근 ?�패:', err);
+      throw new Error('마이??권한??거�??�었?�니??');
     }
   }
 
@@ -61,7 +61,7 @@ class MicrophoneAnalyzer {
     }
     const rms = Math.sqrt(sum / this.dataArray.length);
 
-    // dB 변환 (기준값 조정 + 보정값 적용)
+    // dB 변??(기�?�?조정 + 보정�??�용)
     const db = rms > 0 ? 20 * Math.log10(rms) + 94 + this.calibrationOffset : 0;
     const clampedDb = Math.max(0, Math.min(120, db));
 
@@ -100,11 +100,11 @@ function GlassCard({ children, style }: { children: React.ReactNode; style?: Rea
   );
 }
 
-/** 측정 유형과 시간대에 따른 법적 기준 반환 */
+/** 측정 ?�형�??�간?�???�른 법적 기�? 반환 */
 function getLimits(type: MeasureType) {
   const night = isNighttime();
   const zone = night ? 'nighttime' : 'daytime';
-  const label = night ? '야간' : '주간';
+  const label = night ? '?�간' : '주간';
   const std = LEGAL_STANDARDS[type === 'impact' ? 'impact' : 'airborne'][zone];
   return { label, leqLimit: std.leq, lmaxLimit: std.lmax };
 }
@@ -121,13 +121,13 @@ export function MeasurePage() {
   const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
   const [micError, setMicError] = useState('');
-  const [calibration, setCalibration] = useState(0); // 마이크 보정값 (dB)
+  const [calibration, setCalibration] = useState(0); // 마이??보정�?(dB)
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const allSamplesRef = useRef<number[]>([]);
   const micAnalyzerRef = useRef<MicrophoneAnalyzer | null>(null);
 
-  const duration = measureType === 'impact' ? 60 : 300; // 1분 or 5분
+  const duration = measureType === 'impact' ? 60 : 300; // 1�?or 5�?
   const limits = getLimits(measureType);
 
   async function startMeasure() {
@@ -141,7 +141,7 @@ export function MeasurePage() {
     allSamplesRef.current = [];
 
     try {
-      // 마이크 시작
+      // 마이???�작
       const analyzer = new MicrophoneAnalyzer();
       micAnalyzerRef.current = analyzer;
 
@@ -160,10 +160,10 @@ export function MeasurePage() {
         setLmax(newLmax);
       }, calibration);
 
-      // 측정 시작
+      // 측정 ?�작
       setState('measuring');
 
-      // 타이머
+      // ?�?�머
       timerRef.current = setInterval(() => {
         setElapsed(prev => {
           if (prev + 1 >= duration) {
@@ -174,7 +174,7 @@ export function MeasurePage() {
         });
       }, 1000);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '마이크 접근에 실패했습니다.';
+      const msg = err instanceof Error ? err.message : '마이???�근???�패?�습?�다.';
       setMicError(msg);
     }
   }
@@ -193,11 +193,11 @@ export function MeasurePage() {
     setSaving(true);
     setSaveError('');
     try {
-      const noise_type = measureType === 'impact' ? '직접충격' : '공기전달';
+      const noise_type = measureType === 'impact' ? '직접충격' : '공기?�달';
       await apiSaveMeasure(leq, lmax, noise_type);
       setSaved(true);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : '저장에 실패했습니다.';
+      const msg = err instanceof Error ? err.message : '?�?�에 ?�패?�습?�다.';
       setSaveError(msg);
     } finally {
       setSaving(false);
@@ -221,8 +221,8 @@ export function MeasurePage() {
   const timeStr = `${String(Math.floor(elapsed / 60)).padStart(2, '0')}:${String(elapsed % 60).padStart(2, '0')}`;
 
   const aiChips = measureType === 'impact'
-    ? ['⚡ 발소리', '충격음', '반복성', leq > 55 ? '고강도' : '저강도']
-    : ['🌊 지속소음', '공기전달', '생활소음'];
+    ? ['??발소�?, '충격??, '반복??, leq > 55 ? '고강?? : '?�강도']
+    : ['?�� 지?�소??, '공기?�달', '?�활?�음'];
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100vh', background: '#F0F2FA', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -243,7 +243,7 @@ export function MeasurePage() {
             <ChevronLeft size={18} color="#0A1866" />
           </button>
           <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 18, fontWeight: 700, color: '#0A1866', margin: 0 }}>
-            실시간 측정
+            ?�시�?측정
           </h1>
           {state === 'measuring' && (
             <div style={{
@@ -266,9 +266,9 @@ export function MeasurePage() {
           }}>
             <AlertTriangle size={18} color="#fff" />
             <div>
-              <div style={{ fontSize: 12, fontWeight: 600 }}>법적 기준 초과 감지</div>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>법적 기�? 초과 감�?</div>
               <div style={{ fontSize: 10, opacity: 0.8 }}>
-                Leq {leq} dB — 기준({limits.leqLimit} dB) 초과 +{Math.round((leq - limits.leqLimit) * 10) / 10} dB
+                Leq {leq} dB ??기�?({limits.leqLimit} dB) 초과 +{Math.round((leq - limits.leqLimit) * 10) / 10} dB
               </div>
             </div>
           </div>
@@ -294,7 +294,7 @@ export function MeasurePage() {
                 transition: 'all 0.2s',
               }}
             >
-              {t === 'impact' ? '직접충격 (1분)' : '공기전달 (5분)'}
+              {t === 'impact' ? '직접충격 (1�?' : '공기?�달 (5�?'}
             </button>
           ))}
         </div>
@@ -341,21 +341,21 @@ export function MeasurePage() {
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#D93025', animation: 'noise-pulse 1.2s infinite', marginBottom: 4 }} />
             )}
             <div style={{ fontFamily: "'Bebas Neue', cursive", fontSize: 64, color: '#0A1866', lineHeight: 1 }}>
-              {state === 'idle' ? '—' : dbVal}
+              {state === 'idle' ? '?? : dbVal}
             </div>
             <div style={{ fontSize: 13, color: '#7A8AB8' }}>dB(A)</div>
             {state !== 'idle' && (
               <div style={{ fontSize: 11, fontWeight: 600, color: isOver ? '#D93025' : '#1A3BDB', marginTop: 2 }}>
-                {state === 'done' ? '측정 완료' : isOver ? '기준 초과' : '정상 범위'}
+                {state === 'done' ? '측정 ?�료' : isOver ? '기�? 초과' : '?�상 범위'}
               </div>
             )}
             {state === 'idle' && (
-              <div style={{ fontSize: 11, color: '#7A8AB8', marginTop: 2 }}>대기 중</div>
+              <div style={{ fontSize: 11, color: '#7A8AB8', marginTop: 2 }}>?��?�?/div>
             )}
           </div>
         </div>
 
-        {/* 마이크 에러 */}
+        {/* 마이???�러 */}
         {micError && (
           <div style={{
             marginTop: 14, padding: '12px 16px', borderRadius: 14,
@@ -364,9 +364,9 @@ export function MeasurePage() {
           }}>
             <AlertTriangle size={16} color="#C0271E" />
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#C0271E', marginBottom: 2 }}>마이크 접근 실패</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#C0271E', marginBottom: 2 }}>마이???�근 ?�패</div>
               <div style={{ fontSize: 11, color: '#7A8AB8' }}>{micError}</div>
-              <div style={{ fontSize: 10, color: '#9AA6C0', marginTop: 4 }}>브라우저 설정에서 마이크 권한을 허용해주세요.</div>
+              <div style={{ fontSize: 10, color: '#9AA6C0', marginTop: 4 }}>브라?��? ?�정?�서 마이??권한???�용?�주?�요.</div>
             </div>
           </div>
         )}
@@ -386,7 +386,7 @@ export function MeasurePage() {
               }}
             >
               <Mic size={16} color="#fff" />
-              측정 시작
+              측정 ?�작
             </button>
           )}
           {state === 'measuring' && (
@@ -403,7 +403,7 @@ export function MeasurePage() {
                 }}
               >
                 <Square size={14} color="#0A1866" fill="#0A1866" />
-                측정 중지
+                측정 중�?
               </button>
               <button
                 onClick={saveMeasure}
@@ -418,7 +418,7 @@ export function MeasurePage() {
                 }}
               >
                 {saved ? <CheckCircle size={14} color="#fff" /> : <Save size={14} color="#fff" />}
-                {saving ? '저장 중...' : saved ? '저장됨 ✓' : '이력 저장'}
+                {saving ? '?�??�?..' : saved ? '?�?�됨 ?? : '?�력 ?�??}
               </button>
             </>
           )}
@@ -433,7 +433,7 @@ export function MeasurePage() {
                   fontFamily: "'Space Grotesk', sans-serif", fontSize: 13, fontWeight: 600, color: '#0A1866',
                 }}
               >
-                다시 측정
+                ?�시 측정
               </button>
               <button
                 onClick={saveMeasure}
@@ -448,13 +448,13 @@ export function MeasurePage() {
                 }}
               >
                 {saved ? <CheckCircle size={14} color="#fff" /> : <Save size={14} color="#fff" />}
-                {saving ? '저장 중...' : saved ? '저장 완료 ✓' : '이력 저장'}
+                {saving ? '?�??�?..' : saved ? '?�???�료 ?? : '?�력 ?�??}
               </button>
             </>
           )}
         </div>
 
-        {/* 저장 오류 */}
+        {/* ?�???�류 */}
         {saveError && (
           <div style={{
             marginTop: 10, padding: '10px 14px', borderRadius: 12,
@@ -471,17 +471,17 @@ export function MeasurePage() {
         {state !== 'idle' && (
           <GlassCard style={{ marginTop: 16, padding: '6px 20px' }}>
             {[
-              { key: '측정 시간', val: timeStr, danger: false },
-              { key: `Leq (${measureType === 'impact' ? '1분' : '5분'} 평균)`, val: `${leq} dB(A)`, danger: isLeqOver },
+              { key: '측정 ?�간', val: timeStr, danger: false },
+              { key: `Leq (${measureType === 'impact' ? '1�? : '5�?} ?�균)`, val: `${leq} dB(A)`, danger: isLeqOver },
               ...(limits.lmaxLimit !== null
-                ? [{ key: 'Lmax (최고값)', val: `${lmax} dB(A)`, danger: isLmaxOver }]
-                : [{ key: 'Lmax (최고값)', val: `${lmax} dB(A)`, danger: false }]),
-              { key: '시간대', val: null, badge: `${limits.label} ${new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}` },
+                ? [{ key: 'Lmax (최고�?', val: `${lmax} dB(A)`, danger: isLmaxOver }]
+                : [{ key: 'Lmax (최고�?', val: `${lmax} dB(A)`, danger: false }]),
+              { key: '?�간?�', val: null, badge: `${limits.label} ${new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}` },
               {
-                key: '법적 기준',
+                key: '법적 기�?',
                 val: limits.lmaxLimit !== null
                   ? `Leq ${limits.leqLimit} / Lmax ${limits.lmaxLimit} dB`
-                  : `Leq ${limits.leqLimit} dB (Lmax 미적용)`,
+                  : `Leq ${limits.leqLimit} dB (Lmax 미적??`,
                 danger: false,
               },
             ].map((row, i) => (
@@ -508,7 +508,7 @@ export function MeasurePage() {
         {/* AI Classification */}
         {state !== 'idle' && (
           <div style={{ marginTop: 14, marginBottom: 8 }}>
-            <div style={{ fontSize: 10, color: '#7A8AB8', marginBottom: 8 }}>AI 소음 분류 결과</div>
+            <div style={{ fontSize: 10, color: '#7A8AB8', marginBottom: 8 }}>AI ?�음 분류 결과</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {aiChips.map((chip, i) => (
                 <div key={i} style={{
@@ -531,28 +531,28 @@ export function MeasurePage() {
         {state === 'idle' && (
           <>
             <GlassCard style={{ marginTop: 16, padding: 20, textAlign: 'center' }}>
-              <div style={{ fontSize: 13, color: '#7A8AB8', marginBottom: 8 }}>측정 안내</div>
+              <div style={{ fontSize: 13, color: '#7A8AB8', marginBottom: 8 }}>측정 ?�내</div>
               <div style={{ fontSize: 12, color: '#9AA6C0', lineHeight: 1.6, whiteSpace: 'pre-line' }}>
                 {measureType === 'impact'
-                  ? '직접충격음: 발소리, 뛰는 소리 등 충격성 소음\nLeq + Lmax 기준 적용 (1분 측정)'
-                  : '공기전달음: TV, 음악 등 지속성 소음\nLeq 기준 적용 (5분 측정, Lmax 미적용)'}
+                  ? '직접충격?? 발소�? ?�는 ?�리 ??충격???�음\nLeq + Lmax 기�? ?�용 (1�?측정)'
+                  : '공기?�달?? TV, ?�악 ??지?�성 ?�음\nLeq 기�? ?�용 (5�?측정, Lmax 미적??'}
               </div>
               <div style={{ marginTop: 14, padding: '10px 16px', borderRadius: 12, background: 'rgba(26,59,219,0.06)', display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 11, color: '#7A8AB8' }}>현재 시간대</span>
+                <span style={{ fontSize: 11, color: '#7A8AB8' }}>?�재 ?�간?�</span>
                 <span style={{ fontSize: 11, fontWeight: 700, color: '#1A3BDB' }}>
-                  {limits.label} — Leq {limits.leqLimit} dB 기준
+                  {limits.label} ??Leq {limits.leqLimit} dB 기�?
                 </span>
               </div>
             </GlassCard>
 
-            {/* 마이크 보정 */}
+            {/* 마이??보정 */}
             <GlassCard style={{ marginTop: 12, padding: '16px 20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                 <Mic size={14} color="#7A8AB8" />
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#7A8AB8' }}>마이크 보정</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#7A8AB8' }}>마이??보정</span>
               </div>
               <div style={{ fontSize: 11, color: '#9AA6C0', marginBottom: 12, lineHeight: 1.5 }}>
-                전문 소음측정기와 비교하여 보정값을 조정하세요. 스마트폰 마이크는 ±5dB 오차가 있을 수 있습니다.
+                ?�문 ?�음측정기�? 비교?�여 보정값을 조정?�세?? ?�마?�폰 마이?�는 ±5dB ?�차가 ?�을 ???�습?�다.
               </div>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                 <button
@@ -563,13 +563,13 @@ export function MeasurePage() {
                     fontFamily: "'Space Grotesk', sans-serif", fontSize: 16, fontWeight: 700, color: '#1A3BDB',
                   }}
                 >
-                  −
+                  ??
                 </button>
                 <div style={{ flex: 1, textAlign: 'center' }}>
                   <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 18, fontWeight: 700, color: '#0A1866' }}>
                     {calibration > 0 ? '+' : ''}{calibration} dB
                   </div>
-                  <div style={{ fontSize: 9, color: '#9AA6C0', marginTop: 2 }}>보정값</div>
+                  <div style={{ fontSize: 9, color: '#9AA6C0', marginTop: 2 }}>보정�?/div>
                 </div>
                 <button
                   onClick={() => setCalibration(c => Math.min(20, c + 1))}
@@ -591,7 +591,7 @@ export function MeasurePage() {
                     fontSize: 10, color: '#7A8AB8', cursor: 'pointer',
                   }}
                 >
-                  초기화
+                  초기??
                 </button>
               )}
             </GlassCard>

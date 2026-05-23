@@ -6,9 +6,9 @@ export function TabBar() {
   const location = useLocation();
 
   const tabs = [
-    { path: '/home', label: '홈', icon: Home },
+    { path: '/home', label: '??, icon: Home },
     { path: '/measure', label: '측정', icon: Mic },
-    { path: '/report', label: '리포트', icon: FileText },
+    { path: '/report', label: '리포??, icon: FileText },
     { path: '/chatbot', label: '챗봇', icon: MessageCircle },
     { path: '/mypage', label: '마이', icon: User },
   ];

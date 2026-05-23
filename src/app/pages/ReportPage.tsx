@@ -18,8 +18,8 @@ function GlassCard({ children, style }: { children: React.ReactNode; style?: Rea
 }
 
 function DetailModal({ item, onClose }: { item: HistoryItem; onClose: () => void }) {
-  // API에서 받은 leq_standard / lmax_standard 우선 사용
-  const leqLimit = item.leq_standard ?? (item.period === '야간' ? 34 : 39);
+  // API?�서 받�? leq_standard / lmax_standard ?�선 ?�용
+  const leqLimit = item.leq_standard ?? (item.period === '?�간' ? 34 : 39);
   const lmaxLimit = item.lmax_standard && item.lmax_standard > 0 ? item.lmax_standard : null;
   const leqOver = item.db > leqLimit;
   const lmaxOver = lmaxLimit !== null && item.lmax > lmaxLimit;
@@ -47,7 +47,7 @@ function DetailModal({ item, onClose }: { item: HistoryItem; onClose: () => void
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <div>
             <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 16, fontWeight: 700, color: '#0A1866' }}>
-              상세 측정 결과
+              ?�세 측정 결과
             </div>
             <div style={{ fontSize: 11, color: '#7A8AB8', marginTop: 2 }}>{item.time} · {item.type} · {item.period}</div>
           </div>
@@ -58,12 +58,12 @@ function DetailModal({ item, onClose }: { item: HistoryItem; onClose: () => void
 
         {/* Values */}
         <GlassCard style={{ padding: 20, marginBottom: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#8C98B8', marginBottom: 14 }}>측정값 vs 법적 기준</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#8C98B8', marginBottom: 14 }}>측정�?vs 법적 기�?</div>
 
           {/* Leq */}
           <div style={{ marginBottom: 14 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <span style={{ fontSize: 12, color: '#7A8AB8' }}>Leq (평균 소음)</span>
+              <span style={{ fontSize: 12, color: '#7A8AB8' }}>Leq (?�균 ?�음)</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 16, fontWeight: 700, color: leqOver ? '#C0271E' : '#1A3BDB' }}>
                   {item.db} dB
@@ -79,9 +79,9 @@ function DetailModal({ item, onClose }: { item: HistoryItem; onClose: () => void
               }} />
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-              <span style={{ fontSize: 10, color: '#9AA6C0' }}>기준: {leqLimit} dB</span>
+              <span style={{ fontSize: 10, color: '#9AA6C0' }}>기�?: {leqLimit} dB</span>
               <span style={{ fontSize: 10, fontWeight: 600, color: leqOver ? '#C0271E' : '#1A3BDB' }}>
-                {leqOver ? `+${Math.round((item.db - leqLimit) * 10) / 10} dB 초과` : `여유 ${Math.round((leqLimit - item.db) * 10) / 10} dB`}
+                {leqOver ? `+${Math.round((item.db - leqLimit) * 10) / 10} dB 초과` : `?�유 ${Math.round((leqLimit - item.db) * 10) / 10} dB`}
               </span>
             </div>
           </div>
@@ -89,13 +89,13 @@ function DetailModal({ item, onClose }: { item: HistoryItem; onClose: () => void
           {/* Lmax */}
           <div style={{ marginBottom: 14 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <span style={{ fontSize: 12, color: '#7A8AB8' }}>Lmax (최고 소음)</span>
+              <span style={{ fontSize: 12, color: '#7A8AB8' }}>Lmax (최고 ?�음)</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 16, fontWeight: 700, color: lmaxOver ? '#C0271E' : '#1A3BDB' }}>
                   {item.lmax} dB
                 </span>
                 {lmaxLimit === null
-                  ? <span style={{ fontSize: 10, color: '#9AA6C0' }}>미적용</span>
+                  ? <span style={{ fontSize: 10, color: '#9AA6C0' }}>미적??/span>
                   : lmaxOver ? <AlertTriangle size={14} color="#C0271E" /> : <CheckCircle size={14} color="#1A3BDB" />}
               </div>
             </div>
@@ -109,14 +109,14 @@ function DetailModal({ item, onClose }: { item: HistoryItem; onClose: () => void
                   }} />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                  <span style={{ fontSize: 10, color: '#9AA6C0' }}>기준: {lmaxLimit} dB</span>
+                  <span style={{ fontSize: 10, color: '#9AA6C0' }}>기�?: {lmaxLimit} dB</span>
                   <span style={{ fontSize: 10, fontWeight: 600, color: lmaxOver ? '#C0271E' : '#1A3BDB' }}>
-                    {lmaxOver ? `+${Math.round((item.lmax - lmaxLimit) * 10) / 10} dB 초과` : `여유 ${Math.round((lmaxLimit - item.lmax) * 10) / 10} dB`}
+                    {lmaxOver ? `+${Math.round((item.lmax - lmaxLimit) * 10) / 10} dB 초과` : `?�유 ${Math.round((lmaxLimit - item.lmax) * 10) / 10} dB`}
                   </span>
                 </div>
               </>
             ) : (
-              <div style={{ fontSize: 10, color: '#9AA6C0', marginTop: 4 }}>공기전달음은 Lmax 기준이 없습니다.</div>
+              <div style={{ fontSize: 10, color: '#9AA6C0', marginTop: 4 }}>공기?�달?��? Lmax 기�????�습?�다.</div>
             )}
           </div>
 
@@ -132,23 +132,23 @@ function DetailModal({ item, onClose }: { item: HistoryItem; onClose: () => void
               : <CheckCircle size={16} color="#1A3BDB" />}
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, color: leqOver || lmaxOver ? '#C0271E' : '#1A3BDB' }}>
-                {leqOver || lmaxOver ? '법적 기준 초과' : '법적 기준 이내'}
+                {leqOver || lmaxOver ? '법적 기�? 초과' : '법적 기�? ?�내'}
               </div>
               <div style={{ fontSize: 10, color: '#7A8AB8', marginTop: 2 }}>
-                {item.period === '야간'
+                {item.period === '?�간'
                   ? item.type === '직접충격'
-                    ? '야간 기준: Leq 34 dB / Lmax 52 dB'
-                    : '야간 기준: Leq 40 dB (Lmax 미적용)'
+                    ? '?�간 기�?: Leq 34 dB / Lmax 52 dB'
+                    : '?�간 기�?: Leq 40 dB (Lmax 미적??'
                   : item.type === '직접충격'
-                    ? '주간 기준: Leq 39 dB / Lmax 57 dB'
-                    : '주간 기준: Leq 45 dB (Lmax 미적용)'}
+                    ? '주간 기�?: Leq 39 dB / Lmax 57 dB'
+                    : '주간 기�?: Leq 45 dB (Lmax 미적??'}
               </div>
             </div>
           </div>
         </GlassCard>
 
         {/* PDF Export */}
-        <div style={{ fontSize: 13, fontWeight: 600, color: '#8C98B8', marginBottom: 12 }}>PDF 내보내기</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#8C98B8', marginBottom: 12 }}>PDF ?�보?�기</div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button
             onClick={handlePdf}
@@ -161,10 +161,10 @@ function DetailModal({ item, onClose }: { item: HistoryItem; onClose: () => void
             }}
           >
             <FileText size={15} color={pdfDone ? '#1A3BDB' : '#fff'} />
-            {pdfDone ? 'PDF 생성됨 ✓' : 'PDF 생성'}
+            {pdfDone ? 'PDF ?�성???? : 'PDF ?�성'}
           </button>
           <button
-            onClick={() => alert('공유 기능: 카카오톡 또는 이메일로 공유합니다.')}
+            onClick={() => alert('공유 기능: 카카?�톡 ?�는 ?�메?�로 공유?�니??')}
             style={{
               flex: 1, padding: '14px', borderRadius: 16,
               background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.9)',
@@ -174,14 +174,14 @@ function DetailModal({ item, onClose }: { item: HistoryItem; onClose: () => void
             }}
           >
             <Share2 size={15} color="#0A1866" />
-            공유하기
+            공유?�기
           </button>
         </div>
 
         {pdfDone && (
           <div style={{ marginTop: 12, padding: '12px 16px', borderRadius: 12, background: 'rgba(26,59,219,0.06)', fontSize: 11, color: '#7A8AB8', lineHeight: 1.6 }}>
-            📄 관공서 제출용 PDF가 생성되었습니다.<br />
-            포함 정보: 측정일시, 측정값, 법적 기준 비교, 측정자 정보
+            ?�� 관공서 ?�출??PDF가 ?�성?�었?�니??<br />
+            ?�함 ?�보: 측정?�시, 측정�? 법적 기�? 비교, 측정???�보
           </div>
         )}
       </div>
@@ -203,7 +203,7 @@ export function ReportPage() {
       const records = await apiGetHistory();
       setHistory(records.map(mapRecord));
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : '이력을 불러오지 못했습니다.';
+      const msg = err instanceof Error ? err.message : '?�력??불러?��? 못했?�니??';
       setFetchError(msg);
     } finally {
       setLoading(false);
@@ -232,9 +232,9 @@ export function ReportPage() {
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18 }}>
           <div>
             <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 22, fontWeight: 700, color: '#0A1866' }}>
-              누적 리포트
+              ?�적 리포??
             </div>
-            <div style={{ fontSize: 12, color: '#7A8AB8', marginTop: 4 }}>측정 이력 및 PDF 생성</div>
+            <div style={{ fontSize: 12, color: '#7A8AB8', marginTop: 4 }}>측정 ?�력 �?PDF ?�성</div>
           </div>
           <button
             onClick={loadHistory}
@@ -250,7 +250,7 @@ export function ReportPage() {
           </button>
         </div>
 
-        {/* 오류 메시지 */}
+        {/* ?�류 메시지 */}
         {fetchError && (
           <div style={{
             marginBottom: 16, padding: '10px 14px', borderRadius: 12,
@@ -265,12 +265,12 @@ export function ReportPage() {
 
         {/* Summary */}
         <GlassCard style={{ padding: 20, marginBottom: 20 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#8C98B8', marginBottom: 14 }}>전체 요약</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#8C98B8', marginBottom: 14 }}>?�체 ?�약</div>
           <div style={{ display: 'flex', gap: 12 }}>
             {[
-              { label: '총 측정', val: history.length, unit: '회', color: '#0A1A8C' },
-              { label: '기준 초과', val: overCount, unit: '회', color: '#C0271E' },
-              { label: '평균 소음', val: avgDb, unit: 'dB', color: '#0A1A8C' },
+              { label: '�?측정', val: history.length, unit: '??, color: '#0A1A8C' },
+              { label: '기�? 초과', val: overCount, unit: '??, color: '#C0271E' },
+              { label: '?�균 ?�음', val: avgDb, unit: 'dB', color: '#0A1A8C' },
             ].map(stat => (
               <div key={stat.label} style={{ flex: 1, textAlign: 'center' }}>
                 <div style={{ fontFamily: "'Bebas Neue', cursive", fontSize: 32, color: stat.color, lineHeight: 1 }}>
@@ -287,9 +287,9 @@ export function ReportPage() {
         {/* Filter pills */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
           {[
-            { key: 'all', label: '전체' },
-            { key: 'over', label: '초과만' },
-            { key: 'ok', label: '정상만' },
+            { key: 'all', label: '?�체' },
+            { key: 'over', label: '초과�? },
+            { key: 'ok', label: '?�상�? },
           ].map(f => (
             <button
               key={f.key}
@@ -308,10 +308,10 @@ export function ReportPage() {
           ))}
         </div>
 
-        {/* 로딩 상태 */}
+        {/* 로딩 ?�태 */}
         {loading && (
           <div style={{ textAlign: 'center', padding: '40px 0', color: '#9AA6C0', fontSize: 13 }}>
-            이력을 불러오는 중...
+            ?�력??불러?�는 �?..
           </div>
         )}
 
@@ -345,7 +345,7 @@ export function ReportPage() {
                       background: item.over ? 'rgba(217,48,37,0.1)' : 'rgba(26,59,219,0.08)',
                       color: item.over ? '#C0271E' : '#1A3BDB',
                     }}>
-                      {item.over ? '초과' : '정상'}
+                      {item.over ? '초과' : '?�상'}
                     </span>
                   </div>
                   <div style={{ fontSize: 11, color: '#9AA6C0' }}>
@@ -359,7 +359,7 @@ export function ReportPage() {
 
             {filtered.length === 0 && !fetchError && (
               <div style={{ textAlign: 'center', padding: '40px 0', color: '#9AA6C0', fontSize: 13 }}>
-                {history.length === 0 ? '아직 측정 이력이 없습니다.' : '해당하는 측정 이력이 없습니다.'}
+                {history.length === 0 ? '?�직 측정 ?�력???�습?�다.' : '?�당?�는 측정 ?�력???�습?�다.'}
               </div>
             )}
           </div>
