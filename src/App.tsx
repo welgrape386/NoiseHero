@@ -20,6 +20,7 @@ export function App() {
         <Route path="/report" element={<ReportPage />} />
         <Route path="/chatbot" element={<ChatbotPage />} />
         <Route path="/mypage" element={<MyPage />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   );
