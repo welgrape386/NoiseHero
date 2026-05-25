@@ -113,14 +113,15 @@ function GlassCard({
 /** 측정 유형과 시간대에 따른 법적 기준 반환 */
 function getLimits(type: MeasureType) {
   const night = isNighttime();
-  const period = night ? '야간' : '주간';
+  const zone = night ? '야간' : '주간';
   const noiseType = type === 'impact' ? '직접충격' : '공기전달';
-  const std = LEGAL_STANDARDS.공동주택[noiseType][period];
+
+  const std = LEGAL_STANDARDS.공동주택[noiseType][zone];
 
   return {
-    label: period,
+    label: zone,
     leqLimit: std.leq,
-    lmaxLimit: std.lmax ?? null,
+    lmaxLimit: std.lmax,
   };
 }
 
@@ -215,10 +216,10 @@ export function MeasurePage() {
       const noise_type = measureType === 'impact' ? '직접충격' : '공기전달';
 
       await apiSaveMeasure({
-        leq,
-        lmax,
-        noise_type,
-      });
+      leq,
+      lmax,
+      noise_type,
+    }); 
 
       setSaved(true);
     } catch (err: unknown) {
