@@ -17,11 +17,9 @@ class MicrophoneAnalyzer {
   private stream: MediaStream | null = null;
   private rafId: number | null = null;
   private onUpdate: ((db: number) => void) | null = null;
-  private calibrationOffset = 0; // 마이크 보정값
 
-  async start(onUpdate: (db: number) => void, calibrationOffset = 0) {
+  async start(onUpdate: (db: number) => void) {
     this.onUpdate = onUpdate;
-    this.calibrationOffset = calibrationOffset;
 
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
@@ -29,7 +27,7 @@ class MicrophoneAnalyzer {
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: false,
-        }
+        },
       });
 
       this.audioContext = new AudioContext();
@@ -40,7 +38,7 @@ class MicrophoneAnalyzer {
       this.microphone = this.audioContext.createMediaStreamSource(this.stream);
       this.microphone.connect(this.analyser);
 
-      this.dataArray = new Uint8Array(new ArrayBuffer(this.analyser.frequencyBinCount));
+      this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
       this.analyze();
     } catch (err) {
       console.error('마이크 접근 실패:', err);
@@ -53,16 +51,14 @@ class MicrophoneAnalyzer {
 
     this.analyser.getByteTimeDomainData(this.dataArray);
 
-    // RMS (Root Mean Square) 계산
     let sum = 0;
     for (let i = 0; i < this.dataArray.length; i++) {
       const normalized = (this.dataArray[i] - 128) / 128;
       sum += normalized * normalized;
     }
-    const rms = Math.sqrt(sum / this.dataArray.length);
 
-    // dB 변환 (기준값 조정 + 보정값 적용)
-    const db = rms > 0 ? 20 * Math.log10(rms) + 94 + this.calibrationOffset : 0;
+    const rms = Math.sqrt(sum / this.dataArray.length);
+    const db = rms > 0 ? 20 * Math.log10(rms) + 94 : 0;
     const clampedDb = Math.max(0, Math.min(120, db));
 
     this.onUpdate(clampedDb);
@@ -72,10 +68,14 @@ class MicrophoneAnalyzer {
   stop() {
     if (this.rafId) cancelAnimationFrame(this.rafId);
     if (this.microphone) this.microphone.disconnect();
+
     if (this.stream) {
       this.stream.getTracks().forEach(track => track.stop());
     }
-    if (this.audioContext) this.audioContext.close();
+
+    if (this.audioContext) {
+      this.audioContext.close();
+    }
 
     this.audioContext = null;
     this.analyser = null;
@@ -87,14 +87,24 @@ class MicrophoneAnalyzer {
   }
 }
 
-function GlassCard({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+function GlassCard({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+}) {
   return (
-    <div style={{
-      background: 'rgba(255,255,255,0.58)',
-      backdropFilter: 'blur(22px)', WebkitBackdropFilter: 'blur(22px)',
-      border: '1px solid rgba(255,255,255,0.88)',
-      borderRadius: 24, ...style,
-    }}>
+    <div
+      style={{
+        background: 'rgba(255,255,255,0.58)',
+        backdropFilter: 'blur(22px)',
+        WebkitBackdropFilter: 'blur(22px)',
+        border: '1px solid rgba(255,255,255,0.88)',
+        borderRadius: 24,
+        ...style,
+      }}
+    >
       {children}
     </div>
   );
@@ -104,14 +114,19 @@ function GlassCard({ children, style }: { children: React.ReactNode; style?: Rea
 function getLimits(type: MeasureType) {
   const night = isNighttime();
   const period = night ? '야간' : '주간';
-  const label = period;
   const noiseType = type === 'impact' ? '직접충격' : '공기전달';
   const std = LEGAL_STANDARDS.공동주택[noiseType][period];
-  return { label, leqLimit: std.leq, lmaxLimit: std.lmax };
+
+  return {
+    label: period,
+    leqLimit: std.leq,
+    lmaxLimit: std.lmax ?? null,
+  };
 }
 
 export function MeasurePage() {
   const navigate = useNavigate();
+
   const [measureType, setMeasureType] = useState<MeasureType>('impact');
   const [state, setState] = useState<MeasureState>('idle');
   const [elapsed, setElapsed] = useState(0);
@@ -122,13 +137,12 @@ export function MeasurePage() {
   const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
   const [micError, setMicError] = useState('');
-  const [calibration, setCalibration] = useState(0); // 마이크 보정값 (dB)
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const allSamplesRef = useRef<number[]>([]);
   const micAnalyzerRef = useRef<MicrophoneAnalyzer | null>(null);
 
-  const duration = measureType === 'impact' ? 60 : 300; // 1분 or 5분
+  const duration = measureType === 'impact' ? 60 : 300;
   const limits = getLimits(measureType);
 
   async function startMeasure() {
@@ -142,7 +156,6 @@ export function MeasurePage() {
     allSamplesRef.current = [];
 
     try {
-      // 마이크 시작
       const analyzer = new MicrophoneAnalyzer();
       micAnalyzerRef.current = analyzer;
 
@@ -151,26 +164,24 @@ export function MeasurePage() {
         allSamplesRef.current.push(val);
 
         const arr = allSamplesRef.current;
-        const newLeq = Math.round(
-          10 * Math.log10(arr.reduce((acc, v) => acc + Math.pow(10, v / 10), 0) / arr.length) * 10
-        ) / 10;
+        const energySum = arr.reduce((acc, v) => acc + Math.pow(10, v / 10), 0);
+        const newLeq = Math.round(10 * Math.log10(energySum / arr.length) * 10) / 10;
         const newLmax = Math.max(...arr);
 
         setDbVal(val);
         setLeq(newLeq);
         setLmax(newLmax);
-      }, calibration);
+      });
 
-      // 측정 시작
       setState('measuring');
 
-      // 타이머
       timerRef.current = setInterval(() => {
         setElapsed(prev => {
           if (prev + 1 >= duration) {
             stopMeasure();
             return duration;
           }
+
           return prev + 1;
         });
       }, 1000);
@@ -181,25 +192,34 @@ export function MeasurePage() {
   }
 
   function stopMeasure() {
-    if (timerRef.current) clearInterval(timerRef.current);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
     if (micAnalyzerRef.current) {
       micAnalyzerRef.current.stop();
       micAnalyzerRef.current = null;
     }
+
     setState('done');
   }
 
   async function saveMeasure() {
     if (saving || saved) return;
+
     setSaving(true);
     setSaveError('');
+
     try {
       const noise_type = measureType === 'impact' ? '직접충격' : '공기전달';
+
       await apiSaveMeasure({
         leq,
         lmax,
         noise_type,
       });
+
       setSaved(true);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '저장에 실패했습니다.';
@@ -209,9 +229,22 @@ export function MeasurePage() {
     }
   }
 
+  function resetMeasure() {
+    setState('idle');
+    setElapsed(0);
+    setDbVal(0);
+    setLeq(0);
+    setLmax(0);
+    setSaved(false);
+    setSaveError('');
+    setMicError('');
+    allSamplesRef.current = [];
+  }
+
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+
       if (micAnalyzerRef.current) {
         micAnalyzerRef.current.stop();
       }
@@ -221,80 +254,164 @@ export function MeasurePage() {
   const isLeqOver = leq > limits.leqLimit;
   const isLmaxOver = limits.lmaxLimit !== null && lmax > limits.lmaxLimit;
   const isOver = isLeqOver || isLmaxOver;
+
   const progress = Math.min(elapsed / duration, 1);
-  const gaugeArc = Math.min(dbVal / 100 * 290, 290);
+  const gaugeArc = Math.min((dbVal / 100) * 290, 290);
   const timeStr = `${String(Math.floor(elapsed / 60)).padStart(2, '0')}:${String(elapsed % 60).padStart(2, '0')}`;
 
-  const aiChips = measureType === 'impact'
-    ? ['⚡ 발소리', '충격음', '반복성', leq > 55 ? '고강도' : '저강도']
-    : ['🌊 지속소음', '공기전달', '생활소음'];
+  const aiChips =
+    measureType === 'impact'
+      ? ['⚡ 발소리', '충격음', '반복성', leq > 55 ? '고강도' : '저강도']
+      : ['🌊 지속소음', '공기전달', '생활소음'];
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100vh', background: '#F0F2FA', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+    <div
+      style={{
+        position: 'relative',
+        width: '100%',
+        height: '100vh',
+        background: '#F0F2FA',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
       <Background />
-      <div style={{ position: 'relative', zIndex: 2, flex: 1, overflowY: 'auto', padding: '0 20px 100px' }}>
 
+      <div
+        style={{
+          position: 'relative',
+          zIndex: 2,
+          flex: 1,
+          overflowY: 'auto',
+          padding: '0 20px 100px',
+        }}
+      >
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 20 }}>
           <button
             onClick={() => navigate('/home')}
             style={{
-              width: 38, height: 38, border: 'none', borderRadius: 12,
-              background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(8px)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 38,
+              height: 38,
+              border: 'none',
+              borderRadius: 12,
+              background: 'rgba(255,255,255,0.7)',
+              backdropFilter: 'blur(8px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               cursor: 'pointer',
             }}
           >
             <ChevronLeft size={18} color="#0A1866" />
           </button>
-          <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 18, fontWeight: 700, color: '#0A1866', margin: 0 }}>
+
+          <h1
+            style={{
+              fontFamily: "'Space Grotesk', sans-serif",
+              fontSize: 18,
+              fontWeight: 700,
+              color: '#0A1866',
+              margin: 0,
+            }}
+          >
             실시간 측정
           </h1>
+
           {state === 'measuring' && (
-            <div style={{
-              marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6,
-              padding: '5px 12px', borderRadius: 999,
-              background: 'rgba(217,48,37,0.1)', border: '1px solid rgba(217,48,37,0.2)',
-            }}>
-              <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#D93025', animation: 'noise-pulse 1.2s infinite' }} />
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#C0271E', letterSpacing: '0.06em' }}>LIVE</span>
+            <div
+              style={{
+                marginLeft: 'auto',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '5px 12px',
+                borderRadius: 999,
+                background: 'rgba(217,48,37,0.1)',
+                border: '1px solid rgba(217,48,37,0.2)',
+              }}
+            >
+              <div
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  background: '#D93025',
+                  animation: 'noise-pulse 1.2s infinite',
+                }}
+              />
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: '#C0271E',
+                  letterSpacing: '0.06em',
+                }}
+              >
+                LIVE
+              </span>
             </div>
           )}
         </div>
 
         {/* Warning Banner */}
         {state !== 'idle' && isOver && (
-          <div style={{
-            marginTop: 14, padding: '10px 16px', borderRadius: 14,
-            background: 'linear-gradient(135deg, rgba(217,48,37,.92), rgba(185,28,28,.88))',
-            color: '#fff', display: 'flex', gap: 10, alignItems: 'center',
-          }}>
+          <div
+            style={{
+              marginTop: 14,
+              padding: '10px 16px',
+              borderRadius: 14,
+              background: 'linear-gradient(135deg, rgba(217,48,37,.92), rgba(185,28,28,.88))',
+              color: '#fff',
+              display: 'flex',
+              gap: 10,
+              alignItems: 'center',
+            }}
+          >
             <AlertTriangle size={18} color="#fff" />
             <div>
               <div style={{ fontSize: 12, fontWeight: 600 }}>법적 기준 초과 감지</div>
               <div style={{ fontSize: 10, opacity: 0.8 }}>
-                Leq {leq} dB — 기준({limits.leqLimit} dB) 초과 +{Math.round((leq - limits.leqLimit) * 10) / 10} dB
+                Leq {leq} dB — 기준({limits.leqLimit} dB) 초과 +
+                {Math.round((leq - limits.leqLimit) * 10) / 10} dB
               </div>
             </div>
           </div>
         )}
 
         {/* Toggle */}
-        <div style={{
-          display: 'flex', gap: 4, padding: 4, marginTop: 14,
-          borderRadius: 999, background: 'rgba(255,255,255,0.55)',
-          backdropFilter: 'blur(12px)',
-        }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: 4,
+            padding: 4,
+            marginTop: 14,
+            borderRadius: 999,
+            background: 'rgba(255,255,255,0.55)',
+            backdropFilter: 'blur(12px)',
+          }}
+        >
           {(['impact', 'airborne'] as MeasureType[]).map(t => (
             <button
               key={t}
-              onClick={() => { if (state === 'idle') setMeasureType(t); }}
+              onClick={() => {
+                if (state === 'idle') setMeasureType(t);
+              }}
               disabled={state !== 'idle'}
               style={{
-                flex: 1, border: 'none', padding: '10px 0', borderRadius: 999,
-                fontFamily: "'Space Grotesk', sans-serif", fontSize: 13, fontWeight: 600,
+                flex: 1,
+                border: 'none',
+                padding: '10px 0',
+                borderRadius: 999,
+                fontFamily: "'Space Grotesk', sans-serif",
+                fontSize: 13,
+                fontWeight: 600,
                 cursor: state === 'idle' ? 'pointer' : 'default',
-                background: measureType === t ? 'linear-gradient(135deg, #2D52F0, #1A3BDB)' : 'transparent',
+                background:
+                  measureType === t
+                    ? 'linear-gradient(135deg, #2D52F0, #1A3BDB)'
+                    : 'transparent',
                 color: measureType === t ? '#fff' : '#7A8AB8',
                 transition: 'all 0.2s',
               }}
@@ -305,7 +422,15 @@ export function MeasurePage() {
         </div>
 
         {/* Gauge */}
-        <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: 16 }}>
+        <div
+          style={{
+            position: 'relative',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginTop: 16,
+          }}
+        >
           <svg width="240" height="240" viewBox="0 0 260 260">
             <defs>
               <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -321,18 +446,50 @@ export function MeasurePage() {
                 </feMerge>
               </filter>
             </defs>
-            <circle cx="130" cy="130" r="108" fill="none" stroke="rgba(26,59,219,0.08)" strokeWidth="14"
-              strokeLinecap="round" strokeDasharray="440 440" transform="rotate(-220 130 130)" />
-            <circle cx="130" cy="130" r="92" fill="none" stroke="rgba(26,59,219,0.05)" strokeWidth="1" />
-            <circle cx="130" cy="130" r="108" fill="none" stroke="url(#gaugeGrad)" strokeWidth="14"
+
+            <circle
+              cx="130"
+              cy="130"
+              r="108"
+              fill="none"
+              stroke="rgba(26,59,219,0.08)"
+              strokeWidth="14"
+              strokeLinecap="round"
+              strokeDasharray="440 440"
+              transform="rotate(-220 130 130)"
+            />
+
+            <circle
+              cx="130"
+              cy="130"
+              r="92"
+              fill="none"
+              stroke="rgba(26,59,219,0.05)"
+              strokeWidth="1"
+            />
+
+            <circle
+              cx="130"
+              cy="130"
+              r="108"
+              fill="none"
+              stroke="url(#gaugeGrad)"
+              strokeWidth="14"
               strokeLinecap="round"
               strokeDasharray={`${gaugeArc} 440`}
               transform="rotate(-220 130 130)"
               filter="url(#glow)"
               style={{ transition: 'stroke-dasharray 0.3s ease' }}
             />
+
             {state === 'measuring' && (
-              <circle cx="130" cy="130" r="120" fill="none" stroke="rgba(26,59,219,0.15)" strokeWidth="4"
+              <circle
+                cx="130"
+                cy="130"
+                r="120"
+                fill="none"
+                stroke="rgba(26,59,219,0.15)"
+                strokeWidth="4"
                 strokeLinecap="round"
                 strokeDasharray={`${progress * 440} 440`}
                 transform="rotate(-220 130 130)"
@@ -341,19 +498,53 @@ export function MeasurePage() {
             )}
           </svg>
 
-          <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div
+            style={{
+              position: 'absolute',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+            }}
+          >
             {state === 'measuring' && (
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#D93025', animation: 'noise-pulse 1.2s infinite', marginBottom: 4 }} />
+              <div
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background: '#D93025',
+                  animation: 'noise-pulse 1.2s infinite',
+                  marginBottom: 4,
+                }}
+              />
             )}
-            <div style={{ fontFamily: "'Bebas Neue', cursive", fontSize: 64, color: '#0A1866', lineHeight: 1 }}>
+
+            <div
+              style={{
+                fontFamily: "'Bebas Neue', cursive",
+                fontSize: 64,
+                color: '#0A1866',
+                lineHeight: 1,
+              }}
+            >
               {state === 'idle' ? '—' : dbVal}
             </div>
+
             <div style={{ fontSize: 13, color: '#7A8AB8' }}>dB(A)</div>
+
             {state !== 'idle' && (
-              <div style={{ fontSize: 11, fontWeight: 600, color: isOver ? '#D93025' : '#1A3BDB', marginTop: 2 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: isOver ? '#D93025' : '#1A3BDB',
+                  marginTop: 2,
+                }}
+              >
                 {state === 'done' ? '측정 완료' : isOver ? '기준 초과' : '정상 범위'}
               </div>
             )}
+
             {state === 'idle' && (
               <div style={{ fontSize: 11, color: '#7A8AB8', marginTop: 2 }}>대기 중</div>
             )}
@@ -362,16 +553,34 @@ export function MeasurePage() {
 
         {/* 마이크 에러 */}
         {micError && (
-          <div style={{
-            marginTop: 14, padding: '12px 16px', borderRadius: 14,
-            background: 'rgba(217,48,37,0.08)', border: '1px solid rgba(217,48,37,0.2)',
-            display: 'flex', alignItems: 'center', gap: 10,
-          }}>
+          <div
+            style={{
+              marginTop: 14,
+              padding: '12px 16px',
+              borderRadius: 14,
+              background: 'rgba(217,48,37,0.08)',
+              border: '1px solid rgba(217,48,37,0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+            }}
+          >
             <AlertTriangle size={16} color="#C0271E" />
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#C0271E', marginBottom: 2 }}>마이크 접근 실패</div>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: '#C0271E',
+                  marginBottom: 2,
+                }}
+              >
+                마이크 접근 실패
+              </div>
               <div style={{ fontSize: 11, color: '#7A8AB8' }}>{micError}</div>
-              <div style={{ fontSize: 10, color: '#9AA6C0', marginTop: 4 }}>브라우저 설정에서 마이크 권한을 허용해주세요.</div>
+              <div style={{ fontSize: 10, color: '#9AA6C0', marginTop: 4 }}>
+                브라우저 설정에서 마이크 권한을 허용해주세요.
+              </div>
             </div>
           </div>
         )}
@@ -382,43 +591,74 @@ export function MeasurePage() {
             <button
               onClick={startMeasure}
               style={{
-                flex: 1, border: 'none', padding: 16, borderRadius: 999,
+                flex: 1,
+                border: 'none',
+                padding: 16,
+                borderRadius: 999,
                 background: 'linear-gradient(135deg, #2D52F0, #1A3BDB)',
-                color: '#fff', cursor: 'pointer',
-                fontFamily: "'Space Grotesk', sans-serif", fontSize: 14, fontWeight: 600,
+                color: '#fff',
+                cursor: 'pointer',
+                fontFamily: "'Space Grotesk', sans-serif",
+                fontSize: 14,
+                fontWeight: 600,
                 boxShadow: '0 8px 24px rgba(26,59,219,0.25)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
               }}
             >
               <Mic size={16} color="#fff" />
               측정 시작
             </button>
           )}
+
           {state === 'measuring' && (
             <>
               <button
                 onClick={stopMeasure}
                 style={{
-                  flex: 1, border: 'none', padding: 16, borderRadius: 999,
-                  background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(8px)',
+                  flex: 1,
+                  border: 'none',
+                  padding: 16,
+                  borderRadius: 999,
+                  background: 'rgba(255,255,255,0.8)',
+                  backdropFilter: 'blur(8px)',
                   cursor: 'pointer',
-                  fontFamily: "'Space Grotesk', sans-serif", fontSize: 13, fontWeight: 600,
+                  fontFamily: "'Space Grotesk', sans-serif",
+                  fontSize: 13,
+                  fontWeight: 600,
                   color: '#0A1866',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
                 }}
               >
                 <Square size={14} color="#0A1866" fill="#0A1866" />
                 측정 중지
               </button>
+
               <button
                 onClick={saveMeasure}
                 disabled={saving || saved}
                 style={{
-                  flex: 1.4, border: 'none', padding: 16, borderRadius: 999,
-                  background: saved ? 'rgba(26,59,219,0.2)' : 'linear-gradient(135deg, #2D52F0, #1A3BDB)',
-                  color: '#fff', cursor: saving || saved ? 'default' : 'pointer',
-                  fontFamily: "'Space Grotesk', sans-serif", fontSize: 13, fontWeight: 600,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  flex: 1.4,
+                  border: 'none',
+                  padding: 16,
+                  borderRadius: 999,
+                  background: saved
+                    ? 'rgba(26,59,219,0.2)'
+                    : 'linear-gradient(135deg, #2D52F0, #1A3BDB)',
+                  color: '#fff',
+                  cursor: saving || saved ? 'default' : 'pointer',
+                  fontFamily: "'Space Grotesk', sans-serif",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
                   opacity: saving ? 0.7 : 1,
                 }}
               >
@@ -427,28 +667,47 @@ export function MeasurePage() {
               </button>
             </>
           )}
+
           {state === 'done' && (
             <>
               <button
-                onClick={() => { setState('idle'); setDbVal(0); setLeq(0); setLmax(0); setElapsed(0); setSaved(false); setSaveError(''); }}
+                onClick={resetMeasure}
                 style={{
-                  flex: 1, border: 'none', padding: 16, borderRadius: 999,
+                  flex: 1,
+                  border: 'none',
+                  padding: 16,
+                  borderRadius: 999,
                   background: 'rgba(255,255,255,0.8)',
                   cursor: 'pointer',
-                  fontFamily: "'Space Grotesk', sans-serif", fontSize: 13, fontWeight: 600, color: '#0A1866',
+                  fontFamily: "'Space Grotesk', sans-serif",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: '#0A1866',
                 }}
               >
                 다시 측정
               </button>
+
               <button
                 onClick={saveMeasure}
                 disabled={saving || saved}
                 style={{
-                  flex: 1.4, border: 'none', padding: 16, borderRadius: 999,
-                  background: saved ? 'rgba(26,59,219,0.2)' : 'linear-gradient(135deg, #2D52F0, #1A3BDB)',
-                  color: '#fff', cursor: saving || saved ? 'default' : 'pointer',
-                  fontFamily: "'Space Grotesk', sans-serif", fontSize: 13, fontWeight: 600,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  flex: 1.4,
+                  border: 'none',
+                  padding: 16,
+                  borderRadius: 999,
+                  background: saved
+                    ? 'rgba(26,59,219,0.2)'
+                    : 'linear-gradient(135deg, #2D52F0, #1A3BDB)',
+                  color: '#fff',
+                  cursor: saving || saved ? 'default' : 'pointer',
+                  fontFamily: "'Space Grotesk', sans-serif",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
                   opacity: saving ? 0.7 : 1,
                 }}
               >
@@ -461,12 +720,20 @@ export function MeasurePage() {
 
         {/* 저장 오류 */}
         {saveError && (
-          <div style={{
-            marginTop: 10, padding: '10px 14px', borderRadius: 12,
-            background: 'rgba(217,48,37,0.08)', border: '1px solid rgba(217,48,37,0.2)',
-            fontSize: 12, color: '#C0271E',
-            display: 'flex', alignItems: 'center', gap: 8,
-          }}>
+          <div
+            style={{
+              marginTop: 10,
+              padding: '10px 14px',
+              borderRadius: 12,
+              background: 'rgba(217,48,37,0.08)',
+              border: '1px solid rgba(217,48,37,0.2)',
+              fontSize: 12,
+              color: '#C0271E',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
             <AlertTriangle size={13} color="#C0271E" />
             {saveError}
           </div>
@@ -477,31 +744,66 @@ export function MeasurePage() {
           <GlassCard style={{ marginTop: 16, padding: '6px 20px' }}>
             {[
               { key: '측정 시간', val: timeStr, danger: false },
-              { key: `Leq (${measureType === 'impact' ? '1분' : '5분'} 평균)`, val: `${leq} dB(A)`, danger: isLeqOver },
-              ...(limits.lmaxLimit !== null
-                ? [{ key: 'Lmax (최고값)', val: `${lmax} dB(A)`, danger: isLmaxOver }]
-                : [{ key: 'Lmax (최고값)', val: `${lmax} dB(A)`, danger: false }]),
-              { key: '시간대', val: null, badge: `${limits.label} ${new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}` },
+              {
+                key: `Leq (${measureType === 'impact' ? '1분' : '5분'} 평균)`,
+                val: `${leq} dB(A)`,
+                danger: isLeqOver,
+              },
+              {
+                key: 'Lmax (최고값)',
+                val: `${lmax} dB(A)`,
+                danger: isLmaxOver,
+              },
+              {
+                key: '시간대',
+                val: null,
+                badge: `${limits.label} ${new Date().toLocaleTimeString('ko-KR', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}`,
+              },
               {
                 key: '법적 기준',
-                val: limits.lmaxLimit !== null
-                  ? `Leq ${limits.leqLimit} / Lmax ${limits.lmaxLimit} dB`
-                  : `Leq ${limits.leqLimit} dB (Lmax 미적용)`,
+                val:
+                  limits.lmaxLimit !== null
+                    ? `Leq ${limits.leqLimit} / Lmax ${limits.lmaxLimit} dB`
+                    : `Leq ${limits.leqLimit} dB (Lmax 미적용)`,
                 danger: false,
               },
             ].map((row, i) => (
-              <div key={i} style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '10px 0',
-                borderTop: i > 0 ? '1px solid rgba(26,59,219,0.07)' : 'none',
-              }}>
+              <div
+                key={i}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '10px 0',
+                  borderTop: i > 0 ? '1px solid rgba(26,59,219,0.07)' : 'none',
+                }}
+              >
                 <span style={{ fontSize: 12, color: '#7A8AB8' }}>{row.key}</span>
+
                 {'badge' in row && row.badge ? (
-                  <div style={{ padding: '3px 10px', borderRadius: 999, background: 'rgba(26,59,219,0.1)', color: '#1A3BDB', fontSize: 11 }}>
+                  <div
+                    style={{
+                      padding: '3px 10px',
+                      borderRadius: 999,
+                      background: 'rgba(26,59,219,0.1)',
+                      color: '#1A3BDB',
+                      fontSize: 11,
+                    }}
+                  >
                     {row.badge}
                   </div>
                 ) : (
-                  <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 13, fontWeight: 600, color: row.danger ? '#C0271E' : '#0A1866' }}>
+                  <span
+                    style={{
+                      fontFamily: "'Space Grotesk', sans-serif",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: row.danger ? '#C0271E' : '#0A1866',
+                    }}
+                  >
                     {row.val}
                   </span>
                 )}
@@ -513,18 +815,33 @@ export function MeasurePage() {
         {/* AI Classification */}
         {state !== 'idle' && (
           <div style={{ marginTop: 14, marginBottom: 8 }}>
-            <div style={{ fontSize: 10, color: '#7A8AB8', marginBottom: 8 }}>AI 소음 분류 결과</div>
+            <div style={{ fontSize: 10, color: '#7A8AB8', marginBottom: 8 }}>
+              AI 소음 분류 결과
+            </div>
+
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {aiChips.map((chip, i) => (
-                <div key={i} style={{
-                  padding: '6px 14px', borderRadius: 999, fontSize: 11, fontWeight: 600,
-                  background: i === 0 ? 'rgba(26,59,219,0.1)' :
-                    i === aiChips.length - 1 && leq > 55 ? 'rgba(217,48,37,0.08)' :
-                      'rgba(255,255,255,0.7)',
-                  color: i === 0 ? '#1A3BDB' :
-                    i === aiChips.length - 1 && leq > 55 ? '#C0271E' :
-                      '#0A1866',
-                }}>
+                <div
+                  key={i}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: 999,
+                    fontSize: 11,
+                    fontWeight: 600,
+                    background:
+                      i === 0
+                        ? 'rgba(26,59,219,0.1)'
+                        : i === aiChips.length - 1 && leq > 55
+                          ? 'rgba(217,48,37,0.08)'
+                          : 'rgba(255,255,255,0.7)',
+                    color:
+                      i === 0
+                        ? '#1A3BDB'
+                        : i === aiChips.length - 1 && leq > 55
+                          ? '#C0271E'
+                          : '#0A1866',
+                  }}
+                >
                   {chip}
                 </div>
               ))}
@@ -534,73 +851,38 @@ export function MeasurePage() {
 
         {/* Idle State */}
         {state === 'idle' && (
-          <>
-            <GlassCard style={{ marginTop: 16, padding: 20, textAlign: 'center' }}>
-              <div style={{ fontSize: 13, color: '#7A8AB8', marginBottom: 8 }}>측정 안내</div>
-              <div style={{ fontSize: 12, color: '#9AA6C0', lineHeight: 1.6, whiteSpace: 'pre-line' }}>
-                {measureType === 'impact'
-                  ? '직접충격음: 발소리, 뛰는 소리 등 충격성 소음\nLeq + Lmax 기준 적용 (1분 측정)'
-                  : '공기전달음: TV, 음악 등 지속성 소음\nLeq 기준 적용 (5분 측정, Lmax 미적용)'}
-              </div>
-              <div style={{ marginTop: 14, padding: '10px 16px', borderRadius: 12, background: 'rgba(26,59,219,0.06)', display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 11, color: '#7A8AB8' }}>현재 시간대</span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#1A3BDB' }}>
-                  {limits.label} — Leq {limits.leqLimit} dB 기준
-                </span>
-              </div>
-            </GlassCard>
+          <GlassCard style={{ marginTop: 16, padding: 20, textAlign: 'center' }}>
+            <div style={{ fontSize: 13, color: '#7A8AB8', marginBottom: 8 }}>측정 안내</div>
 
-            {/* 마이크 보정 */}
-            <GlassCard style={{ marginTop: 12, padding: '16px 20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                <Mic size={14} color="#7A8AB8" />
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#7A8AB8' }}>마이크 보정</span>
-              </div>
-              <div style={{ fontSize: 11, color: '#9AA6C0', marginBottom: 12, lineHeight: 1.5 }}>
-                전문 소음측정기와 비교하여 보정값을 조정하세요. 스마트폰 마이크는 ±5dB 오차가 있을 수 있습니다.
-              </div>
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                <button
-                  onClick={() => setCalibration(c => Math.max(-20, c - 1))}
-                  style={{
-                    width: 32, height: 32, borderRadius: 10, border: '1px solid rgba(26,59,219,0.2)',
-                    background: 'rgba(255,255,255,0.8)', cursor: 'pointer',
-                    fontFamily: "'Space Grotesk', sans-serif", fontSize: 16, fontWeight: 700, color: '#1A3BDB',
-                  }}
-                >
-                  −
-                </button>
-                <div style={{ flex: 1, textAlign: 'center' }}>
-                  <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 18, fontWeight: 700, color: '#0A1866' }}>
-                    {calibration > 0 ? '+' : ''}{calibration} dB
-                  </div>
-                  <div style={{ fontSize: 9, color: '#9AA6C0', marginTop: 2 }}>보정값</div>
-                </div>
-                <button
-                  onClick={() => setCalibration(c => Math.min(20, c + 1))}
-                  style={{
-                    width: 32, height: 32, borderRadius: 10, border: '1px solid rgba(26,59,219,0.2)',
-                    background: 'rgba(255,255,255,0.8)', cursor: 'pointer',
-                    fontFamily: "'Space Grotesk', sans-serif", fontSize: 16, fontWeight: 700, color: '#1A3BDB',
-                  }}
-                >
-                  +
-                </button>
-              </div>
-              {calibration !== 0 && (
-                <button
-                  onClick={() => setCalibration(0)}
-                  style={{
-                    marginTop: 10, width: '100%', padding: '6px', borderRadius: 8,
-                    border: '1px solid rgba(26,59,219,0.15)', background: 'rgba(255,255,255,0.6)',
-                    fontSize: 10, color: '#7A8AB8', cursor: 'pointer',
-                  }}
-                >
-                  초기화
-                </button>
-              )}
-            </GlassCard>
-          </>
+            <div
+              style={{
+                fontSize: 12,
+                color: '#9AA6C0',
+                lineHeight: 1.6,
+                whiteSpace: 'pre-line',
+              }}
+            >
+              {measureType === 'impact'
+                ? '직접충격음: 발소리, 뛰는 소리 등 충격성 소음\nLeq + Lmax 기준 적용 (1분 측정)'
+                : '공기전달음: TV, 음악 등 지속성 소음\nLeq 기준 적용 (5분 측정, Lmax 미적용)'}
+            </div>
+
+            <div
+              style={{
+                marginTop: 14,
+                padding: '10px 16px',
+                borderRadius: 12,
+                background: 'rgba(26,59,219,0.06)',
+                display: 'flex',
+                justifyContent: 'space-between',
+              }}
+            >
+              <span style={{ fontSize: 11, color: '#7A8AB8' }}>현재 시간대</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#1A3BDB' }}>
+                {limits.label} — Leq {limits.leqLimit} dB 기준
+              </span>
+            </div>
+          </GlassCard>
         )}
       </div>
 
