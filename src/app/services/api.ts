@@ -307,7 +307,7 @@ export async function apiSendChatbotMessage(
   message: string,
   conversation_history: ChatMessage[] = []
 ) {
-  return request<ChatbotResponse>('/chatbot/', {
+  return request<ChatbotResponse>('/api/chatbot', {
     method: 'POST',
     body: JSON.stringify({
       message,
