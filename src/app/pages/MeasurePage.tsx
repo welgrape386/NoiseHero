@@ -522,7 +522,7 @@ export function MeasurePage() {
 
             <div
               style={{
-                fontFamily: "'Bebas Neue', cursive",
+                fontFamily: "'Space Grotesk', sans-serif",
                 fontSize: 64,
                 color: '#0A1866',
                 lineHeight: 1,

@@ -105,7 +105,7 @@ export function HomePage() {
 
           {latest ? (
             <>
-              <div style={{ fontFamily: "'Bebas Neue', cursive", fontSize: 72, lineHeight: 1, color: '#0A1A8C' }}>
+              <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 72, lineHeight: 1, color: '#0A1A8C' }}>
                 {latest.db}{' '}
                 <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 18, color: '#9AA6C0', fontWeight: 500 }}>dB(A)</span>
               </div>
@@ -138,7 +138,7 @@ export function HomePage() {
                     backdropFilter: 'blur(12px)',
                   }}>
                     <div style={{ fontSize: 11, color: '#9AA6C0', marginBottom: 6 }}>{item.label}</div>
-                    <div style={{ fontFamily: "'Bebas Neue', cursive", fontSize: 28, color: '#0A1A8C' }}>
+                    <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 28, color: '#0A1A8C' }}>
                       {item.val}{' '}
                       <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 12, color: '#9AA6C0' }}>dB</span>
                     </div>

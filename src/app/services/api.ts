@@ -176,6 +176,17 @@ export type ReportResponse = {
   data: GeneratedReport;
 };
 
+export type ReportPdfResponse =
+  | string
+  | {
+      message?: string;
+      pdf_url?: string;
+      file_url?: string;
+      url?: string;
+      path?: string;
+      report_id?: string;
+    };
+
 function getToken() {
   return localStorage.getItem(TOKEN_KEY);
 }
@@ -254,7 +265,7 @@ export async function apiGetMe() {
 export async function apiUpdateMe(payload: UserUpdateRequest) {
   const res = await request<{
     message: string;
-    updated_fields: UserUpdateRequest;
+    updated_fields?: UserUpdateRequest;
   }>('/auth/me', {
     method: 'PATCH',
     body: JSON.stringify(payload),
@@ -262,7 +273,7 @@ export async function apiUpdateMe(payload: UserUpdateRequest) {
 
   return {
     ...payload,
-    ...res.updated_fields,
+    ...(res.updated_fields ?? {}),
   };
 }
 
@@ -300,8 +311,8 @@ export async function apiSaveMeasure(data: {
 }
 
 export async function apiGetHistory() {
-  const res = await request<{ history: NoiseRecord[] }>('/noise/history');
-  return res.history || [];
+  const res = await request<{ history?: NoiseRecord[] }>('/noise/history');
+  return res.history ?? [];
 }
 
 export async function apiSendChatbotMessage(
@@ -317,11 +328,26 @@ export async function apiSendChatbotMessage(
   });
 }
 
-export async function apiGenerateReport(payload: ReportRequest) {
-  return request<ReportResponse>('/api/report', {
-    method: 'POST',
-    body: JSON.stringify(payload),
+export async function apiCreateReportPdf() {
+  return request<ReportPdfResponse>('/report/pdf', {
+    method: 'GET',
   });
+}
+
+export function getPdfUrlFromResponse(res: ReportPdfResponse) {
+  if (typeof res === 'string') {
+    if (res.startsWith('http')) return res;
+    if (res.startsWith('/')) return `${API_BASE_URL}${res}`;
+    return '';
+  }
+
+  const url = res.pdf_url || res.file_url || res.url || res.path || '';
+
+  if (!url) return '';
+  if (url.startsWith('http')) return url;
+  if (url.startsWith('/')) return `${API_BASE_URL}${url}`;
+
+  return url;
 }
 
 export function mapRecord(record: NoiseRecord): HistoryItem {
@@ -389,7 +415,3 @@ export const LEGAL_STANDARDS = {
     },
   },
 };
-
-export async function apiCreateReportPdf() {
-  return request<string>('/report/pdf');
-}

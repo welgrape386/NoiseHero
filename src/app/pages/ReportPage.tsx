@@ -9,15 +9,13 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import {
-  API_BASE_URL,
-  apiCreateReportPdf,
   apiGetHistory,
   apiGetMe,
-  apiGenerateReport,
+  apiCreateReportPdf,
+  getPdfUrlFromResponse,
   mapRecord,
   type HistoryItem,
   type UserMe,
-  type GeneratedReport,
 } from '../services/api';
 
 function GlassCard({
@@ -52,12 +50,11 @@ export function ReportPage() {
   const [targetLocation, setTargetLocation] = useState('윗집');
   const [targetAddress, setTargetAddress] = useState('');
 
-  const [report, setReport] = useState<GeneratedReport | null>(null);
-
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [fetchError, setFetchError] = useState('');
   const [reportError, setReportError] = useState('');
+  const [pdfUrl, setPdfUrl] = useState('');
 
   async function loadPageData() {
     setLoading(true);
@@ -97,41 +94,25 @@ export function ReportPage() {
       return;
     }
 
-    const selectedRecords = history
-      .filter(item => selectedIds.includes(item.id))
-      .map(item => ({
-        measured_at: item.time,
-        noise_type: item.type,
-        time_zone: item.period,
-        primary_source: item.primary_source,
-        secondary_source: item.secondary_source,
-        leq: item.db,
-        lmax: item.lmax,
-        leq_standard: item.leq_standard ?? 0,
-        lmax_standard: item.lmax_standard ?? null,
-        is_exceeded: item.over,
-      }));
-
-    if (selectedRecords.length === 0) {
+    if (selectedIds.length === 0) {
       setReportError('민원서에 넣을 측정 이력을 선택해 주세요.');
       return;
     }
 
     setGenerating(true);
     setReportError('');
-    setReport(null);
+    setPdfUrl('');
 
     try {
-      const res = await apiGenerateReport({
-        user_info: userInfo,
-        target_info: {
-          location: targetLocation,
-          address: targetAddress,
-        },
-        selected_records: selectedRecords,
-      });
+      const res = await apiCreateReportPdf();
+      const url = getPdfUrlFromResponse(res);
 
-      setReport(res.data);
+      if (url) {
+        setPdfUrl(url);
+        window.open(url, '_blank');
+      } else {
+        setReportError('PDF는 생성되었지만 PDF 주소를 찾지 못했습니다.');
+      }
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : '민원서 생성에 실패했습니다.';
@@ -141,21 +122,13 @@ export function ReportPage() {
     }
   }
 
-  async function handleDownloadPdf() {
-    try {
-      const res = await apiCreateReportPdf();
-
-      // 백엔드가 pdf_url 문자열을 주는 경우
-      if (typeof res === 'string') {
-        window.open(`${API_BASE_URL}${res}`, '_blank');
-        return;
-      }
-
-      alert('PDF가 생성되었습니다.');
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'PDF 생성에 실패했습니다.';
-      alert(msg);
+  function handleDownloadPdf() {
+    if (!pdfUrl) {
+      alert('먼저 민원서를 생성해 주세요.');
+      return;
     }
+
+    window.open(pdfUrl, '_blank');
   }
 
   const filtered = history.filter(item => {
@@ -215,7 +188,7 @@ export function ReportPage() {
               민원서 생성
             </div>
             <div style={{ fontSize: 12, color: '#7A8AB8', marginTop: 4 }}>
-              측정 이력을 선택해 층간소음 민원서 초안을 생성합니다.
+              측정 이력을 선택해 층간소음 민원서 PDF를 생성합니다.
             </div>
           </div>
 
@@ -243,36 +216,11 @@ export function ReportPage() {
         </div>
 
         {fetchError && (
-          <div
-            style={{
-              marginBottom: 16,
-              padding: '10px 14px',
-              borderRadius: 12,
-              background: 'rgba(217,48,37,0.08)',
-              border: '1px solid rgba(217,48,37,0.2)',
-              fontSize: 12,
-              color: '#C0271E',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-            }}
-          >
-            <AlertTriangle size={13} color="#C0271E" />
-            {fetchError}
-          </div>
+          <ErrorBox message={fetchError} />
         )}
 
         <GlassCard style={{ padding: 20, marginBottom: 16 }}>
-          <div
-            style={{
-              fontSize: 13,
-              fontWeight: 700,
-              color: '#0A1866',
-              marginBottom: 12,
-            }}
-          >
-            신청인 및 건물 정보
-          </div>
+          <SectionTitle>신청인 및 건물 정보</SectionTitle>
 
           {userInfo ? (
             <div style={{ fontSize: 12, color: '#7A8AB8', lineHeight: 1.8 }}>
@@ -301,16 +249,7 @@ export function ReportPage() {
         </GlassCard>
 
         <GlassCard style={{ padding: 20, marginBottom: 16 }}>
-          <div
-            style={{
-              fontSize: 13,
-              fontWeight: 700,
-              color: '#0A1866',
-              marginBottom: 12,
-            }}
-          >
-            상대세대 정보
-          </div>
+          <SectionTitle>상대세대 정보</SectionTitle>
 
           <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
             {['윗집', '아래집', '옆집'].map(loc => (
@@ -376,7 +315,7 @@ export function ReportPage() {
               <div key={stat.label} style={{ flex: 1, textAlign: 'center' }}>
                 <div
                   style={{
-                    fontFamily: "'Bebas Neue', cursive",
+                    fontFamily: "'Space Grotesk', sans-serif",
                     fontSize: 32,
                     color: stat.color,
                     lineHeight: 1,
@@ -552,25 +491,7 @@ export function ReportPage() {
           </div>
         )}
 
-        {reportError && (
-          <div
-            style={{
-              marginTop: 16,
-              padding: '10px 14px',
-              borderRadius: 12,
-              background: 'rgba(217,48,37,0.08)',
-              border: '1px solid rgba(217,48,37,0.2)',
-              fontSize: 12,
-              color: '#C0271E',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-            }}
-          >
-            <AlertTriangle size={13} color="#C0271E" />
-            {reportError}
-          </div>
-        )}
+        {reportError && <ErrorBox message={reportError} />}
 
         <button
           onClick={handleGenerateReport}
@@ -598,108 +519,13 @@ export function ReportPage() {
           {generating ? '민원서 생성 중...' : `민원서 생성하기 (${selectedIds.length}개 선택)`}
         </button>
 
-        {report && (
-          <GlassCard style={{ padding: 22, marginTop: 22 }}>
-            <div
-              style={{
-                fontSize: 16,
-                fontWeight: 800,
-                color: '#0A1866',
-                marginBottom: 12,
-              }}
-            >
-              {report.title}
+        {pdfUrl && (
+          <GlassCard style={{ padding: 20, marginTop: 18 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: '#0A1866' }}>
+              PDF 생성 완료
             </div>
-
-            <div style={{ fontSize: 11, color: '#9AA6C0', marginBottom: 18 }}>
-              작성일: {report.created_at}
-            </div>
-
-            <ReportSection title="신청인 정보">
-              <Line label="이름" value={report.applicant.nickname} />
-              <Line label="아파트" value={report.applicant.apartment_name} />
-              <Line
-                label="동·호수"
-                value={`${report.applicant.dong || '-'}동 ${report.applicant.ho || '-'}호`}
-              />
-              <Line label="관리사무소 연락처" value={report.applicant.management_phone} />
-            </ReportSection>
-
-            <ReportSection title="상대세대 정보">
-              <Line label="주거위치" value={report.target.location} />
-              <Line label="상세주소" value={report.target.address} />
-            </ReportSection>
-
-            <ReportSection title="건물 정보">
-              <Line label="건설사" value={report.building.building_company} />
-              <Line label="슬라브 두께" value={report.building.slab_thickness} />
-              <Line label="구조" value={report.building.structure} />
-              <Line label="층간소음 위원회" value={report.building.committee} />
-              <Line label="관리사무소" value={report.building.management_office} />
-            </ReportSection>
-
-            <ReportSection title="소음 측정 이력">
-              {report.noise_records.map((r, idx) => (
-                <div
-                  key={`${r.measured_at}-${idx}`}
-                  style={{
-                    padding: '10px 0',
-                    borderBottom:
-                      idx === report.noise_records.length - 1
-                        ? 'none'
-                        : '1px solid rgba(122,138,184,0.18)',
-                  }}
-                >
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#0A1866' }}>
-                    {idx + 1}. {r.measured_at} ({r.time_zone})
-                  </div>
-                  <div style={{ fontSize: 11, color: '#7A8AB8', marginTop: 4 }}>
-                    {r.noise_type} · Leq {r.leq}dB / Lmax {r.lmax}dB
-                  </div>
-                  <div style={{ fontSize: 11, color: '#7A8AB8', marginTop: 2 }}>
-                    기준: Leq {r.leq_standard}dB / Lmax {r.lmax_standard ?? '미적용'}
-                  </div>
-                  <div style={{ fontSize: 11, color: '#C0271E', marginTop: 2 }}>
-                    초과: Leq +{r.leq_exceeded ?? 0}dB / Lmax +{r.lmax_exceeded ?? 0}dB
-                  </div>
-                  <div style={{ fontSize: 11, color: '#7A8AB8', marginTop: 2 }}>
-                    주소음원: {r.primary_source || '미분류'} / 부소음원:{' '}
-                    {r.secondary_source || '없음'}
-                  </div>
-                </div>
-              ))}
-            </ReportSection>
-
-            <ReportSection title="피해 내용">
-              <p style={{ fontSize: 12, color: '#7A8AB8', lineHeight: 1.7, margin: 0 }}>
-                {report.damage_summary}
-              </p>
-            </ReportSection>
-
-            <ReportSection title="결론">
-              <p style={{ fontSize: 12, color: '#7A8AB8', lineHeight: 1.7 }}>
-                1. {report.conclusion.site_inspection}
-              </p>
-              <p style={{ fontSize: 12, color: '#7A8AB8', lineHeight: 1.7 }}>
-                2. {report.conclusion.noise_measurement}
-              </p>
-              <p style={{ fontSize: 12, color: '#7A8AB8', lineHeight: 1.7 }}>
-                3. {report.conclusion.prevention}
-              </p>
-            </ReportSection>
-
-            <div
-              style={{
-                marginTop: 16,
-                padding: 12,
-                borderRadius: 14,
-                background: 'rgba(26,59,219,0.06)',
-                fontSize: 11,
-                color: '#7A8AB8',
-                lineHeight: 1.6,
-              }}
-            >
-              {report.disclaimer}
+            <div style={{ fontSize: 12, color: '#7A8AB8', marginTop: 6 }}>
+              새 창에서 PDF가 열렸습니다. 열리지 않았다면 아래 버튼을 눌러주세요.
             </div>
 
             <button
@@ -722,7 +548,7 @@ export function ReportPage() {
               }}
             >
               <Download size={15} color="#fff" />
-              PDF로 저장하기
+              PDF 열기
             </button>
           </GlassCard>
         )}
@@ -735,57 +561,45 @@ export function ReportPage() {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
         }
-
-        @media print {
-          body * {
-            visibility: hidden;
-          }
-        }
       `}</style>
     </div>
   );
 }
 
-function ReportSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ marginTop: 18 }}>
-      <div
-        style={{
-          fontSize: 13,
-          fontWeight: 800,
-          color: '#0A1866',
-          marginBottom: 8,
-        }}
-      >
-        {title}
-      </div>
-      <div>{children}</div>
+    <div
+      style={{
+        fontSize: 13,
+        fontWeight: 700,
+        color: '#0A1866',
+        marginBottom: 12,
+      }}
+    >
+      {children}
     </div>
   );
 }
 
-function Line({ label, value }: { label: string; value?: string | number }) {
+function ErrorBox({ message }: { message: string }) {
   return (
     <div
       style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        gap: 12,
+        marginTop: 16,
+        marginBottom: 16,
+        padding: '10px 14px',
+        borderRadius: 12,
+        background: 'rgba(217,48,37,0.08)',
+        border: '1px solid rgba(217,48,37,0.2)',
         fontSize: 12,
-        color: '#7A8AB8',
-        padding: '3px 0',
+        color: '#C0271E',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
       }}
     >
-      <span>{label}</span>
-      <strong style={{ color: '#0A1866', textAlign: 'right' }}>
-        {value || '미입력'}
-      </strong>
+      <AlertTriangle size={13} color="#C0271E" />
+      {message}
     </div>
   );
 }
