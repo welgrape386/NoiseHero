@@ -334,7 +334,9 @@ export async function apiCreateReportPdf() {
   });
 }
 
-export function getPdfUrlFromResponse(res: ReportPdfResponse) {
+export function getPdfUrlFromResponse(res: ReportPdfResponse | null | undefined) {
+  if (!res) return '';
+
   if (typeof res === 'string') {
     if (res.startsWith('http')) return res;
     if (res.startsWith('/')) return `${API_BASE_URL}${res}`;
