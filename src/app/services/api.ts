@@ -329,9 +329,20 @@ export async function apiSendChatbotMessage(
 }
 
 export async function apiCreateReportPdf() {
-  return request<ReportPdfResponse>('/report/pdf', {
+  const token = getToken();
+
+  const res = await fetch(`${API_BASE_URL}/report/pdf`, {
     method: 'GET',
+    headers: {
+      Authorization: token ? `Bearer ${token}` : '',
+    },
   });
+
+  if (!res.ok) {
+    throw new Error(`PDF 생성 실패 (${res.status})`);
+  }
+
+  return await res.blob();
 }
 
 export function getPdfUrlFromResponse(res: ReportPdfResponse | null | undefined) {

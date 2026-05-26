@@ -12,7 +12,6 @@ import {
   apiGetHistory,
   apiGetMe,
   apiCreateReportPdf,
-  getPdfUrlFromResponse,
   mapRecord,
   type HistoryItem,
   type UserMe,
@@ -84,43 +83,39 @@ export function ReportPage() {
   }
 
   async function handleGenerateReport() {
-    if (!userInfo) {
-      setReportError('신청인 정보를 불러오지 못했습니다.');
-      return;
-    }
-
-    if (!targetAddress.trim()) {
-      setReportError('상대세대 동·호수를 입력해 주세요.');
-      return;
-    }
-
-    if (selectedIds.length === 0) {
-      setReportError('민원서에 넣을 측정 이력을 선택해 주세요.');
-      return;
-    }
-
-    setGenerating(true);
-    setReportError('');
-    setPdfUrl('');
-
-    try {
-      const res = await apiCreateReportPdf();
-      const url = getPdfUrlFromResponse(res);
-
-      if (url) {
-        setPdfUrl(url);
-        window.open(url, '_blank');
-      } else {
-        setReportError('PDF는 생성되었지만 PDF 주소를 찾지 못했습니다.');
-      }
-    } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : '민원서 생성에 실패했습니다.';
-      setReportError(msg);
-    } finally {
-      setGenerating(false);
-    }
+  if (!userInfo) {
+    setReportError('신청인 정보를 불러오지 못했습니다.');
+    return;
   }
+
+  if (!targetAddress.trim()) {
+    setReportError('상대세대 동·호수를 입력해 주세요.');
+    return;
+  }
+
+  if (selectedIds.length === 0) {
+    setReportError('민원서에 넣을 측정 이력을 선택해 주세요.');
+    return;
+  }
+
+  setGenerating(true);
+  setReportError('');
+  setPdfUrl('');
+
+  try {
+    const blob = await apiCreateReportPdf();
+    const url = window.URL.createObjectURL(blob);
+
+    setPdfUrl(url);
+    window.open(url, '_blank');
+  } catch (err: unknown) {
+    const msg =
+      err instanceof Error ? err.message : '민원서 생성에 실패했습니다.';
+    setReportError(msg);
+  } finally {
+    setGenerating(false);
+  }
+}
 
   function handleDownloadPdf() {
     if (!pdfUrl) {
