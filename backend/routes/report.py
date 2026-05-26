@@ -33,26 +33,26 @@ async def create_noise_report_pdf(
     pdf.setTitle("NoiseGuard 소음 민원서")
 
     # 한글 폰트
-    font_path = "C:/Windows/Fonts/malgun.ttf"
-    pdfmetrics.registerFont(TTFont("Malgun", font_path))
-    pdf.setFont("Malgun", 14)
+    font_path = os.path.join(os.path.dirname(__file__), "..", "fonts", "NANUMGOTHIC.TTF")
+    pdfmetrics.registerFont(TTFont("NanumGothic", font_path))
+    pdf.setFont("NanumGothic", 14)
 
     y = 800
 
     pdf.drawString(50, y, "NoiseGuard 소음 민원서 초안")
     y -= 40
 
-    pdf.setFont("Malgun", 10)
+    pdf.setFont("NanumGothic", 10)
     pdf.drawString(50, y, f"작성자 이메일: {email}")
     y -= 25
     pdf.drawString(50, y, f"생성일시: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     y -= 40
 
-    pdf.setFont("Malgun", 12)
+    pdf.setFont("NanumGothic", 12)
     pdf.drawString(50, y, "1. 소음 기록 요약")
     y -= 30
 
-    pdf.setFont("Malgun", 10)
+    pdf.setFont("NanumGothic", 10)
 
     if not records:
         pdf.drawString(50, y, "저장된 소음 기록이 없습니다.")
@@ -76,16 +76,16 @@ async def create_noise_report_pdf(
 
             if y < 80:
                 pdf.showPage()
-                pdf.setFont("Malgun", 10)
+                pdf.setFont("NanumGothic", 10)
                 y = 800
 
     y -= 25
 
-    pdf.setFont("Malgun", 12)
+    pdf.setFont("NanumGothic", 12)
     pdf.drawString(50, y, "2. 민원 내용 초안")
     y -= 30
 
-    pdf.setFont("Malgun", 10)
+    pdf.setFont("NanumGothic", 10)
 
     complaint_lines = [
         "위 소음 기록은 사용자가 NoiseGuard 서비스를 통해 측정한 자료입니다.",
