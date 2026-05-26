@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, UploadFile, File
 from datetime import datetime
+import shutil, os
 
 from database import noise_collection
 from routes.auth import get_current_user
 from models.noise_record import NoiseRecordCreate
+from classifier import classify
 
 router = APIRouter()
 
@@ -28,36 +30,32 @@ async def create_noise_record(
     email = current_user.get("email")
     now = datetime.utcnow()
 
-    # 주간/야간 자동 판단
     if now.hour >= 22 or now.hour < 6:
         time_zone = "야간"
     else:
         time_zone = "주간"
 
-    # 소음 유형별 법적 기준 가져오기
     standard = LEGAL_STANDARDS.get(noise.noise_type, LEGAL_STANDARDS["직접충격"])
     leq_standard = standard[time_zone]["leq"]
     lmax_standard = standard[time_zone]["lmax"]
 
-    # 초과 여부 판단
     leq_exceeded = noise.leq > leq_standard
     lmax_exceeded = (lmax_standard is not None) and (noise.lmax > lmax_standard)
     is_exceeded = leq_exceeded or lmax_exceeded
 
     record = {
-    "email": email,
-    "leq": noise.leq,
-    "lmax": noise.lmax,
-    "noise_type": noise.noise_type,
-    "primary_source": noise.primary_source,    # 추가
-    "secondary_source": noise.secondary_source, # 추가
-    "time_zone": time_zone,
-    "leq_standard": leq_standard,
-    "lmax_standard": lmax_standard,
-    "is_exceeded": is_exceeded,
-    "measured_at": now
-}
-
+        "email": email,
+        "leq": noise.leq,
+        "lmax": noise.lmax,
+        "noise_type": noise.noise_type,
+        "primary_source": noise.primary_source,
+        "secondary_source": noise.secondary_source,
+        "time_zone": time_zone,
+        "leq_standard": leq_standard,
+        "lmax_standard": lmax_standard,
+        "is_exceeded": is_exceeded,
+        "measured_at": now
+    }
 
     result = await noise_collection.insert_one(record)
 
@@ -88,3 +86,20 @@ async def get_history(current_user: dict = Depends(get_current_user)):
     return {
         "history": records
     }
+
+
+@router.post("/classify")
+async def classify_noise(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    temp_path = f"temp_{file.filename}"
+    with open(temp_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    try:
+        result = classify(temp_path)
+    finally:
+        os.remove(temp_path)
+
+    return {"success": True, "data": result}
