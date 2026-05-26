@@ -1,4 +1,4 @@
-const API_BASE_URL = 'https://noisehero.onrender.com';
+export const API_BASE_URL = 'https://noisehero.onrender.com';
 
 const TOKEN_KEY = 'noise_token';
 const USER_KEY = 'noise_user';
@@ -13,6 +13,7 @@ export type UserMe = {
   message?: string;
   email: string;
   nickname?: string;
+
   apartment_name?: string;
   dong?: string;
   ho?: string;
@@ -388,3 +389,7 @@ export const LEGAL_STANDARDS = {
     },
   },
 };
+
+export async function apiCreateReportPdf() {
+  return request<string>('/report/pdf');
+}
