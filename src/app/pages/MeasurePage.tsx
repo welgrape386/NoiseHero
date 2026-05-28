@@ -142,6 +142,37 @@ function getLimits(type: MeasureType) {
   };
 }
 
+function isValidSource(value?: string) {
+  if (!value) return false;
+
+  const trimmed = value.trim();
+
+  return (
+    trimmed !== '' &&
+    trimmed !== '분류 안 됨' &&
+    trimmed !== '주소음원 미분류' &&
+    trimmed !== '미분류' &&
+    trimmed !== '없음' &&
+    trimmed !== '부소음원 없음' &&
+    trimmed !== 'undefined' &&
+    trimmed !== 'null'
+  );
+}
+
+function normalizeNoiseType(value?: string): NoiseType | undefined {
+  if (!value) return undefined;
+
+  if (value.includes('공기전달') || value.includes('공기')) {
+    return '공기전달';
+  }
+
+  if (value.includes('직접충격') || value.includes('충격')) {
+    return '직접충격';
+  }
+
+  return undefined;
+}
+
 export function MeasurePage() {
   const navigate = useNavigate();
 
@@ -201,11 +232,12 @@ export function MeasurePage() {
 
       setClassifyResult(result);
 
-      const detectedNoiseType =
+      const detectedNoiseType = normalizeNoiseType(
         result.noise_type ||
-        result.category ||
-        result.label ||
-        result.predicted_class;
+          result.category ||
+          result.label ||
+          result.predicted_class
+      );
 
       if (detectedNoiseType === '공기전달') {
         setMeasureType('airborne');
@@ -342,31 +374,50 @@ export function MeasurePage() {
   function getPrimarySource() {
     if (!classifyResult) return undefined;
 
-    return (
+    const source =
       classifyResult.primary_source ||
       classifyResult.label ||
       classifyResult.predicted_class ||
       classifyResult.category ||
-      classifyResult.noise_type ||
-      (typeof classifyResult.result === 'string' ? classifyResult.result : undefined)
-    );
+      (typeof classifyResult.result === 'string' ? classifyResult.result : undefined);
+
+    return isValidSource(source) ? source : undefined;
   }
 
   function getSecondarySource() {
     if (!classifyResult) return undefined;
 
-    return classifyResult.secondary_source || classifyResult.sub_label || undefined;
+    const source = classifyResult.secondary_source || classifyResult.sub_label;
+
+    return isValidSource(source) ? source : undefined;
+  }
+
+  function getDetectedNoiseType(): NoiseType {
+    const detected = normalizeNoiseType(
+      classifyResult?.noise_type ||
+        classifyResult?.category ||
+        classifyResult?.label ||
+        classifyResult?.predicted_class
+    );
+
+    if (detected) return detected;
+
+    return measureType === 'impact' ? '직접충격' : '공기전달';
   }
 
   async function saveMeasure() {
     if (saving || saved) return;
 
+    if (classifying) {
+      setSaveError('AI 소음 분석이 끝난 뒤 저장해 주세요.');
+      return;
+    }
+
     setSaving(true);
     setSaveError('');
 
     try {
-      const noise_type: NoiseType =
-        measureType === 'impact' ? '직접충격' : '공기전달';
+      const noise_type = getDetectedNoiseType();
 
       await apiSaveMeasure({
         leq,
@@ -435,13 +486,15 @@ export function MeasurePage() {
       ? (classifyResult.standards as { leq?: number; lmax?: number })
       : undefined;
 
+  const primarySource = getPrimarySource();
+  const secondarySource = getSecondarySource();
+  const detectedNoiseType = getDetectedNoiseType();
+
   const aiChips = classifyResult
     ? [
-        getPrimarySource() || '주소음원 미분류',
-        getSecondarySource() || '부소음원 없음',
-        classifyResult.noise_type ||
-          classifyResult.category ||
-          (measureType === 'impact' ? '직접충격' : '공기전달'),
+        primarySource && `주소음원: ${primarySource}`,
+        secondarySource && `부소음원: ${secondarySource}`,
+        detectedNoiseType,
         `${limits.label} 기준`,
         `Leq 기준 ${standard?.leq ?? limits.leqLimit}dB`,
         standard?.lmax
@@ -449,7 +502,7 @@ export function MeasurePage() {
           : limits.lmaxLimit
             ? `Lmax 기준 ${limits.lmaxLimit}dB`
             : 'Lmax 미적용',
-      ]
+      ].filter((chip): chip is string => Boolean(chip))
     : [
         '분류 전',
         measureType === 'impact' ? '직접충격' : '공기전달',
@@ -877,7 +930,7 @@ export function MeasurePage() {
 
               <button
                 onClick={saveMeasure}
-                disabled={saving || saved}
+                disabled={saving || saved || classifying}
                 style={{
                   flex: 1.4,
                   border: 'none',
@@ -887,7 +940,7 @@ export function MeasurePage() {
                     ? 'rgba(26,59,219,0.2)'
                     : 'linear-gradient(135deg, #2D52F0, #1A3BDB)',
                   color: '#fff',
-                  cursor: saving || saved ? 'default' : 'pointer',
+                  cursor: saving || saved || classifying ? 'default' : 'pointer',
                   fontFamily: strongFont,
                   fontSize: 13,
                   fontWeight: 800,
@@ -895,11 +948,11 @@ export function MeasurePage() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 8,
-                  opacity: saving ? 0.7 : 1,
+                  opacity: saving || classifying ? 0.7 : 1,
                 }}
               >
                 {saved ? <CheckCircle size={14} color="#fff" /> : <Save size={14} color="#fff" />}
-                {saving ? '저장 중...' : saved ? '저장됨 ✓' : '이력 저장'}
+                {classifying ? 'AI 분석 중...' : saving ? '저장 중...' : saved ? '저장됨 ✓' : '이력 저장'}
               </button>
             </>
           )}
@@ -926,7 +979,7 @@ export function MeasurePage() {
 
               <button
                 onClick={saveMeasure}
-                disabled={saving || saved}
+                disabled={saving || saved || classifying}
                 style={{
                   flex: 1.4,
                   border: 'none',
@@ -936,7 +989,7 @@ export function MeasurePage() {
                     ? 'rgba(26,59,219,0.2)'
                     : 'linear-gradient(135deg, #2D52F0, #1A3BDB)',
                   color: '#fff',
-                  cursor: saving || saved ? 'default' : 'pointer',
+                  cursor: saving || saved || classifying ? 'default' : 'pointer',
                   fontFamily: strongFont,
                   fontSize: 13,
                   fontWeight: 800,
@@ -944,7 +997,7 @@ export function MeasurePage() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 8,
-                  opacity: saving ? 0.7 : 1,
+                  opacity: saving || classifying ? 0.7 : 1,
                 }}
               >
                 {saved ? <CheckCircle size={14} color="#fff" /> : <Save size={14} color="#fff" />}

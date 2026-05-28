@@ -40,6 +40,21 @@ function GlassCard({
   );
 }
 
+function isValidSource(value?: string) {
+  if (!value) return false;
+
+  const trimmed = value.trim();
+
+  return (
+    trimmed !== '' &&
+    trimmed !== '분류 안 됨' &&
+    trimmed !== '미분류' &&
+    trimmed !== '없음' &&
+    trimmed !== 'undefined' &&
+    trimmed !== 'null'
+  );
+}
+
 export function ReportPage() {
   const [filter, setFilter] = useState<'all' | 'over' | 'ok'>('all');
   const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -83,45 +98,46 @@ export function ReportPage() {
   }
 
   async function handleGenerateReport() {
-  if (!userInfo) {
-    setReportError('신청인 정보를 불러오지 못했습니다.');
-    return;
+    if (!userInfo) {
+      setReportError('신청인 정보를 불러오지 못했습니다.');
+      return;
+    }
+
+    if (!targetAddress.trim()) {
+      setReportError('상대세대 동·호수를 입력해 주세요.');
+      return;
+    }
+
+    if (selectedIds.length === 0) {
+      setReportError('민원서에 넣을 측정 이력을 선택해 주세요.');
+      return;
+    }
+
+    setGenerating(true);
+    setReportError('');
+    setPdfUrl('');
+
+    try {
+      const blob = await apiCreateReportPdf({
+        selected_record_ids: selectedIds,
+        target: {
+          location: targetLocation,
+          address: targetAddress,
+        },
+      });
+
+      const url = window.URL.createObjectURL(blob);
+
+      setPdfUrl(url);
+      window.open(url, '_blank');
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : '민원서 생성에 실패했습니다.';
+      setReportError(msg);
+    } finally {
+      setGenerating(false);
+    }
   }
-
-  if (!targetAddress.trim()) {
-    setReportError('상대세대 동·호수를 입력해 주세요.');
-    return;
-  }
-
-  if (selectedIds.length === 0) {
-    setReportError('민원서에 넣을 측정 이력을 선택해 주세요.');
-    return;
-  }
-
-  setGenerating(true);
-  setReportError('');
-  setPdfUrl('');
-
-  try {
-    const blob = await apiCreateReportPdf({
-      selected_record_ids: selectedIds,
-      target: {
-        location: targetLocation,
-        address: targetAddress,
-      },
-    });
-    const url = window.URL.createObjectURL(blob);
-
-    setPdfUrl(url);
-    window.open(url, '_blank');
-  } catch (err: unknown) {
-    const msg =
-      err instanceof Error ? err.message : '민원서 생성에 실패했습니다.';
-    setReportError(msg);
-  } finally {
-    setGenerating(false);
-  }
-}
 
   function handleDownloadPdf() {
     if (!pdfUrl) {
@@ -139,6 +155,7 @@ export function ReportPage() {
   });
 
   const overCount = history.filter(i => i.over).length;
+
   const avgDb =
     history.length > 0
       ? Math.round(
@@ -216,9 +233,7 @@ export function ReportPage() {
           </button>
         </div>
 
-        {fetchError && (
-          <ErrorBox message={fetchError} />
-        )}
+        {fetchError && <ErrorBox message={fetchError} />}
 
         <GlassCard style={{ padding: 20, marginBottom: 16 }}>
           <SectionTitle>신청인 및 건물 정보</SectionTitle>
@@ -375,6 +390,8 @@ export function ReportPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {filtered.map(item => {
               const checked = selectedIds.includes(item.id);
+              const hasPrimarySource = isValidSource(item.primary_source);
+              const hasSecondarySource = isValidSource(item.secondary_source);
 
               return (
                 <div
@@ -464,10 +481,11 @@ export function ReportPage() {
                       {item.lmax} dB
                     </div>
 
-                    {(item.primary_source || item.secondary_source) && (
+                    {(hasPrimarySource || hasSecondarySource) && (
                       <div style={{ fontSize: 10, color: '#7A8AB8', marginTop: 4 }}>
-                        주소음원: {item.primary_source || '미분류'} / 부소음원:{' '}
-                        {item.secondary_source || '없음'}
+                        {hasPrimarySource && `주소음원: ${item.primary_source}`}
+                        {hasPrimarySource && hasSecondarySource && ' / '}
+                        {hasSecondarySource && `부소음원: ${item.secondary_source}`}
                       </div>
                     )}
                   </div>
