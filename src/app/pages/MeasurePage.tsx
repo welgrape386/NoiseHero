@@ -181,7 +181,9 @@ export function MeasurePage() {
     setClassifying(true);
 
     try {
-      const result = await apiClassifyNoise(file);
+      const raw = await apiClassifyNoise(file);
+      const result = raw.result ?? raw;
+
       setClassifyResult(result);
 
       if (result.noise_type === '공기전달') {

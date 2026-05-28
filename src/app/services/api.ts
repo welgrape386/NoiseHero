@@ -62,46 +62,6 @@ export type NoiseMeasureRequest = {
   secondary_source?: string;
 };
 
-export type NoiseClassifyResponse = {
-  noise_type?: string;
-  primary_source?: string;
-  secondary_source?: string;
-  time_zone?: string;
-  leq_standard?: number;
-  lmax_standard?: number | null;
-  is_exceeded?: boolean;
-  [key: string]: any;
-};
-
-export async function apiClassifyNoise(file: File) {
-  const token = getToken();
-
-  const formData = new FormData();
-  formData.append('file', file);
-
-  const res = await fetch(`${API_BASE_URL}/noise/classify`, {
-    method: 'POST',
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: formData,
-  });
-
-  let data: any = null;
-
-  try {
-    data = await res.json();
-  } catch {
-    data = null;
-  }
-
-  if (!res.ok) {
-    throw new Error(data?.detail || data?.message || `소음 분류 실패 (${res.status})`);
-  }
-
-  return data as NoiseClassifyResponse;
-}
-
 export type NoiseRecord = {
   _id: string;
   email?: string;
@@ -146,86 +106,32 @@ export type ChatbotResponse = {
   };
 };
 
+export type NoiseClassifyResponse = {
+  noise_type?: NoiseType;
+  primary_source?: string;
+  secondary_source?: string;
+  time_zone?: string;
+  leq_standard?: number;
+  lmax_standard?: number | null;
+  result?: {
+    noise_type?: NoiseType;
+    primary_source?: string;
+    secondary_source?: string;
+    time_zone?: string;
+    leq_standard?: number;
+    lmax_standard?: number | null;
+  };
+};
+
 export type ReportTargetInfo = {
   location: string;
   address: string;
 };
 
-export type ReportNoiseRecord = {
-  measured_at: string;
-  noise_type: string;
-  time_zone: string;
-  primary_source?: string;
-  secondary_source?: string;
-  leq: number;
-  lmax: number;
-  leq_standard: number;
-  lmax_standard?: number | null;
-  is_exceeded: boolean;
-};
-
-export type ReportRequest = {
-  user_info: UserMe;
-  target_info: ReportTargetInfo;
-  selected_records: ReportNoiseRecord[];
-};
-
-export type GeneratedReport = {
-  title: string;
-  created_at: string;
-  applicant: {
-    nickname?: string;
-    apartment_name?: string;
-    dong?: string;
-    ho?: string;
-    floor?: number;
-    management_phone?: string;
-  };
+export type ReportPdfRequest = {
+  selected_record_ids: string[];
   target: ReportTargetInfo;
-  building: {
-    building_company?: string;
-    slab_thickness?: string;
-    structure?: string;
-    committee?: string;
-    management_office?: string;
-  };
-  noise_records: Array<{
-    measured_at: string;
-    time_zone: string;
-    noise_type: string;
-    primary_source?: string;
-    secondary_source?: string;
-    leq: number;
-    lmax: number;
-    leq_standard: number;
-    lmax_standard?: number | null;
-    leq_exceeded?: number;
-    lmax_exceeded?: number;
-  }>;
-  damage_summary: string;
-  conclusion: {
-    site_inspection: string;
-    noise_measurement: string;
-    prevention: string;
-  };
-  disclaimer: string;
 };
-
-export type ReportResponse = {
-  success: boolean;
-  data: GeneratedReport;
-};
-
-export type ReportPdfResponse =
-  | string
-  | {
-      message?: string;
-      pdf_url?: string;
-      file_url?: string;
-      url?: string;
-      path?: string;
-      report_id?: string;
-    };
 
 function getToken() {
   return localStorage.getItem(TOKEN_KEY);
@@ -355,6 +261,41 @@ export async function apiGetHistory() {
   return res.history ?? [];
 }
 
+export async function apiClassifyNoise(file: File) {
+  const token = getToken();
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetch(`${API_BASE_URL}/noise/classify`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  let data: any = null;
+
+  try {
+    data = await res.json();
+  } catch {
+    data = null;
+  }
+
+  if (!res.ok) {
+    const message =
+      data?.detail ||
+      data?.error ||
+      data?.message ||
+      `소음 분류 실패 (${res.status})`;
+
+    throw new Error(message);
+  }
+
+  return data as NoiseClassifyResponse;
+}
+
 export async function apiSendChatbotMessage(
   message: string,
   conversation_history: ChatMessage[] = []
@@ -368,39 +309,30 @@ export async function apiSendChatbotMessage(
   });
 }
 
-export async function apiCreateReportPdf() {
+export async function apiCreateReportPdf(payload: ReportPdfRequest) {
   const token = getToken();
 
   const res = await fetch(`${API_BASE_URL}/report/pdf`, {
-    method: 'GET',
+    method: 'POST',
     headers: {
-      Authorization: token ? `Bearer ${token}` : '',
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
-    throw new Error(`PDF 생성 실패 (${res.status})`);
+    let message = `PDF 생성 실패 (${res.status})`;
+
+    try {
+      const data = await res.json();
+      message = data?.detail || data?.message || data?.error || message;
+    } catch {}
+
+    throw new Error(message);
   }
 
   return await res.blob();
-}
-
-export function getPdfUrlFromResponse(res: ReportPdfResponse | null | undefined) {
-  if (!res) return '';
-
-  if (typeof res === 'string') {
-    if (res.startsWith('http')) return res;
-    if (res.startsWith('/')) return `${API_BASE_URL}${res}`;
-    return '';
-  }
-
-  const url = res.pdf_url || res.file_url || res.url || res.path || '';
-
-  if (!url) return '';
-  if (url.startsWith('http')) return url;
-  if (url.startsWith('/')) return `${API_BASE_URL}${url}`;
-
-  return url;
 }
 
 export function mapRecord(record: NoiseRecord): HistoryItem {
@@ -416,21 +348,6 @@ export function mapRecord(record: NoiseRecord): HistoryItem {
     lmax_standard: record.lmax_standard,
     primary_source: record.primary_source,
     secondary_source: record.secondary_source,
-  };
-}
-
-export function mapRecordForReport(record: NoiseRecord): ReportNoiseRecord {
-  return {
-    measured_at: record.measured_at,
-    noise_type: record.noise_type,
-    time_zone: record.time_zone,
-    primary_source: record.primary_source,
-    secondary_source: record.secondary_source,
-    leq: record.leq,
-    lmax: record.lmax,
-    leq_standard: record.leq_standard,
-    lmax_standard: record.lmax_standard,
-    is_exceeded: record.is_exceeded,
   };
 }
 
