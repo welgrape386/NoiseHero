@@ -84,7 +84,7 @@ export type HistoryItem = {
   type: string;
   period: string;
   time: string;
-  measured_at: string;
+  measured_at?: string;
   over: boolean;
   leq_standard?: number;
   lmax_standard?: number | null;
@@ -343,12 +343,12 @@ export function mapRecord(record: NoiseRecord): HistoryItem {
     type: record.noise_type,
     period: record.time_zone,
     time: formatDateTime(record.measured_at),
+    measured_at: record.measured_at,
     over: record.is_exceeded,
     leq_standard: record.leq_standard,
     lmax_standard: record.lmax_standard,
     primary_source: record.primary_source,
     secondary_source: record.secondary_source,
-    measured_at: record.measured_at,
   };
 }
 
@@ -360,17 +360,27 @@ export function isNighttime(date = new Date()) {
 function formatDateTime(value?: string) {
   if (!value) return '';
 
-  const date = new Date(value);
+  let normalized = value;
+
+  const hasTimezone = /Z$|[+-]\d{2}:\d{2}$/.test(value);
+
+  if (!hasTimezone && value.includes('T')) {
+    normalized = `${value}+09:00`;
+  }
+
+  const date = new Date(normalized);
 
   if (Number.isNaN(date.getTime())) {
     return value;
   }
 
   return date.toLocaleString('ko-KR', {
+    timeZone: 'Asia/Seoul',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+    hour12: false,
   });
 }
 

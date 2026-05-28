@@ -879,8 +879,10 @@ export function MeasurePage() {
                 key: '시간대',
                 val: null,
                 badge: `${limits.label} ${new Date().toLocaleTimeString('ko-KR', {
+                  timeZone: 'Asia/Seoul',
                   hour: '2-digit',
                   minute: '2-digit',
+                  hour12: false,
                 })}`,
               },
               {
