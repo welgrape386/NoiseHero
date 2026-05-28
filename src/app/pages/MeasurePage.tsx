@@ -9,7 +9,6 @@ import {
   Square,
   CheckCircle,
   Mic,
-  Upload,
 } from 'lucide-react';
 import {
   apiSaveMeasure,
@@ -86,6 +85,10 @@ class MicrophoneAnalyzer {
     this.onUpdate(clampedDb);
     this.rafId = requestAnimationFrame(this.analyze);
   };
+
+  getStream() {
+    return this.stream;
+  }
 
   stop() {
     if (this.rafId) cancelAnimationFrame(this.rafId);
@@ -171,7 +174,7 @@ export function MeasurePage() {
   const limits = getLimits(measureType);
   
 
-  async function handleClassifyFile(file: File) {
+  async function classifyRecordedAudio(file: File) {
     const maxSize = 20 * 1024 * 1024;
 
     setAudioFile(file);
@@ -258,6 +261,48 @@ export function MeasurePage() {
         setLmax(newLmax);
       }, calibration);
 
+      const stream = analyzer.getStream();
+
+      if (!stream) {
+        throw new Error('녹음 스트림을 가져오지 못했습니다.');
+      }
+
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm')
+          ? 'audio/webm'
+          : '';
+
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = event => {
+        if (event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const blobType = recorder.mimeType || 'audio/webm';
+        const blob = new Blob(recordedChunksRef.current, { type: blobType });
+        const file = new File([blob], `noise-record-${Date.now()}.webm`, {
+          type: blobType,
+        });
+
+        setAudioFile(file);
+
+        if (file.size > 0) {
+          void classifyRecordedAudio(file);
+        } else {
+          setClassifyError('녹음된 오디오가 비어 있어 AI 분류를 진행하지 못했습니다.');
+        }
+      };
+
+      recorder.start();
+
       setState('measuring');
 
       timerRef.current = setInterval(() => {
@@ -277,7 +322,14 @@ export function MeasurePage() {
   }
 
   function stopMeasure() {
-    if (timerRef.current) clearInterval(timerRef.current);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
 
     if (micAnalyzerRef.current) {
       micAnalyzerRef.current.stop();
@@ -345,11 +397,16 @@ export function MeasurePage() {
     setClassifyResult(null);
     setAudioFile(null);
     recordedChunksRef.current = [];
+    mediaRecorderRef.current = null;
   }
 
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+
+      if (mediaRecorderRef.current?.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
 
       if (micAnalyzerRef.current) {
         micAnalyzerRef.current.stop();
@@ -559,7 +616,7 @@ export function MeasurePage() {
             AI 소음 분류
           </div>
 
-          <label
+          <div
             style={{
               width: '100%',
               boxSizing: 'border-box',
@@ -571,29 +628,24 @@ export function MeasurePage() {
               alignItems: 'center',
               justifyContent: 'center',
               gap: 8,
-              cursor: classifying ? 'wait' : 'pointer',
               color: '#0A1866',
               fontSize: 12,
               fontWeight: 700,
             }}
           >
-            <Upload size={14} color="#0A1866" />
-            {classifying ? 'AI 분류 중...' : '오디오 파일 업로드'}
-            <input
-              type="file"
-              accept="audio/*"
-              disabled={classifying}
-              onChange={e => {
-                const file = e.target.files?.[0];
-                if (file) handleClassifyFile(file);
-              }}
-              style={{ display: 'none' }}
-            />
-          </label>
+            <Mic size={14} color="#0A1866" />
+            {classifying
+              ? 'AI 소음 분석 중...'
+              : state === 'measuring'
+                ? '측정 종료 후 녹음본을 자동 분석합니다'
+                : classifyResult
+                  ? 'AI 소음 분석 완료'
+                  : '측정 후 AI가 녹음본을 자동 분석합니다'}
+          </div>
 
           {audioFile && (
             <div style={{ fontSize: 10, color: '#9AA6C0', marginTop: 8 }}>
-              선택 파일: {audioFile.name}
+              녹음 파일: {audioFile.name}
             </div>
           )}
 

@@ -269,8 +269,8 @@ export async function apiSaveMeasure(data: {
       noise_type:
         data.noise_type ??
         (data.measure_type === 'airborne' ? '공기전달' : '직접충격'),
-      primary_source: data.primary_source,
-      secondary_source: data.secondary_source,
+      primary_source: data.primary_source ?? '분류 안 됨',
+      secondary_source: data.secondary_source ?? '없음',
     }),
   });
 }
