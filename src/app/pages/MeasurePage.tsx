@@ -29,7 +29,7 @@ class MicrophoneAnalyzer {
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private microphone: MediaStreamAudioSourceNode | null = null;
-  private dataArray: Uint8Array | null = null;
+  private dataArray: Uint8Array<ArrayBuffer> | null = null;
   private stream: MediaStream | null = null;
   private rafId: number | null = null;
   private onUpdate: ((db: number) => void) | null = null;
@@ -56,7 +56,9 @@ class MicrophoneAnalyzer {
       this.microphone = this.audioContext.createMediaStreamSource(this.stream);
       this.microphone.connect(this.analyser);
 
-      this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+      this.dataArray = new Uint8Array(
+        new ArrayBuffer(this.analyser.frequencyBinCount)
+      );
       this.analyze();
     } catch (err) {
       console.error('마이크 접근 실패:', err);
@@ -67,7 +69,9 @@ class MicrophoneAnalyzer {
   private analyze = () => {
     if (!this.analyser || !this.dataArray || !this.onUpdate) return;
 
-    this.analyser.getByteTimeDomainData(this.dataArray);
+    this.analyser.getByteTimeDomainData(
+      this.dataArray as Uint8Array<ArrayBuffer>
+    );
 
     let sum = 0;
     for (let i = 0; i < this.dataArray.length; i++) {
