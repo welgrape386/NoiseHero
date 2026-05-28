@@ -111,19 +111,22 @@ export type NoiseClassifyResponse = {
   noise_type?: NoiseType | string;
   primary_source?: string;
   secondary_source?: string;
-  result?: string;
+
   label?: string;
   category?: string;
-  confidence?: number;
+  predicted_class?: string;
+  sub_label?: string;
+  result?: string | Record<string, unknown>;
+
   legal_standard?: {
     leq?: number;
     lmax?: number | null;
   };
+
   standards?: {
     leq?: number;
     lmax?: number | null;
   };
-  message?: string;
 };
 
 export type ReportTargetInfo = {

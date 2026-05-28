@@ -17,10 +17,10 @@ import {
   LEGAL_STANDARDS,
   isNighttime,
   type NoiseClassifyResponse,
-  type NoiseType,
 } from '../services/api';
 
 type MeasureType = 'impact' | 'airborne';
+type NoiseType = '직접충격' | '공기전달';
 type MeasureState = 'idle' | 'measuring' | 'done';
 
 const strongFont = "'Space Grotesk', 'Pretendard', 'Noto Sans KR', sans-serif";
@@ -155,6 +155,9 @@ export function MeasurePage() {
   const [micError, setMicError] = useState('');
   const [calibration, setCalibration] = useState(0);
 
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [classifyResult, setClassifyResult] = useState<NoiseClassifyResponse | null>(null);
   const [classifying, setClassifying] = useState(false);
@@ -166,27 +169,53 @@ export function MeasurePage() {
 
   const duration = measureType === 'impact' ? 60 : 300;
   const limits = getLimits(measureType);
+  
 
   async function handleClassifyFile(file: File) {
     const maxSize = 20 * 1024 * 1024;
 
-    const raw = await apiClassifyNoise(file);
+    setAudioFile(file);
 
-    const result: NoiseClassifyResponse =
-      typeof raw.result === 'object' && raw.result !== null
-        ? raw.result
-        : raw;
-
-    setClassifyResult(result);
-
-    const detectedNoiseType = result.noise_type || result.category;
-
-    if (detectedNoiseType === '공기전달') {
-      setMeasureType('airborne');
+    if (file.size > maxSize) {
+      setClassifyError('파일 용량이 너무 큽니다. 20MB 이하 파일만 업로드해 주세요.');
+      setClassifyResult(null);
+      return;
     }
 
-    if (detectedNoiseType === '직접충격') {
-      setMeasureType('impact');
+    setClassifying(true);
+    setClassifyError('');
+    setClassifyResult(null);
+
+    try {
+      const raw = await apiClassifyNoise(file);
+
+      const result: NoiseClassifyResponse =
+        raw.result &&
+        typeof raw.result === 'object' &&
+        !Array.isArray(raw.result)
+          ? (raw.result as NoiseClassifyResponse)
+          : raw;
+
+      setClassifyResult(result);
+
+      const detectedNoiseType =
+        result.noise_type ||
+        result.category ||
+        result.label ||
+        result.predicted_class;
+
+      if (detectedNoiseType === '공기전달') {
+        setMeasureType('airborne');
+      }
+
+      if (detectedNoiseType === '직접충격') {
+        setMeasureType('impact');
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'AI 소음 분류에 실패했습니다.';
+      setClassifyError(msg);
+    } finally {
+      setClassifying(false);
     }
   }
 
@@ -194,11 +223,15 @@ export function MeasurePage() {
     setMicError('');
     setSaved(false);
     setSaveError('');
+    setClassifyError('');
+    setClassifyResult(null);
+    setAudioFile(null);
     setElapsed(0);
     setDbVal(0);
     setLeq(0);
     setLmax(0);
     allSamplesRef.current = [];
+    recordedChunksRef.current = [];
 
     try {
       const analyzer = new MicrophoneAnalyzer();
@@ -254,6 +287,25 @@ export function MeasurePage() {
     setState('done');
   }
 
+  function getPrimarySource() {
+    if (!classifyResult) return undefined;
+
+    return (
+      classifyResult.primary_source ||
+      classifyResult.label ||
+      classifyResult.predicted_class ||
+      classifyResult.category ||
+      classifyResult.noise_type ||
+      (typeof classifyResult.result === 'string' ? classifyResult.result : undefined)
+    );
+  }
+
+  function getSecondarySource() {
+    if (!classifyResult) return undefined;
+
+    return classifyResult.secondary_source || classifyResult.sub_label || undefined;
+  }
+
   async function saveMeasure() {
     if (saving || saved) return;
 
@@ -261,19 +313,15 @@ export function MeasurePage() {
     setSaveError('');
 
     try {
-      const noise_type: NoiseType = measureType === 'impact' ? '직접충격' : '공기전달';
+      const noise_type: NoiseType =
+        measureType === 'impact' ? '직접충격' : '공기전달';
 
       await apiSaveMeasure({
         leq,
         lmax,
         noise_type,
-        primary_source:
-          classifyResult?.primary_source ||
-          classifyResult?.label ||
-          classifyResult?.result ||
-          classifyResult?.category ||
-          undefined,
-        secondary_source: classifyResult?.secondary_source,
+        primary_source: getPrimarySource() || '분류 안 됨',
+        secondary_source: getSecondarySource() || '없음',
       });
 
       setSaved(true);
@@ -293,6 +341,10 @@ export function MeasurePage() {
     setElapsed(0);
     setSaved(false);
     setSaveError('');
+    setClassifyError('');
+    setClassifyResult(null);
+    setAudioFile(null);
+    recordedChunksRef.current = [];
   }
 
   useEffect(() => {
@@ -315,15 +367,21 @@ export function MeasurePage() {
     elapsed % 60
   ).padStart(2, '0')}`;
 
-  const standard = classifyResult?.legal_standard ?? classifyResult?.standards;
+  const standard =
+  classifyResult?.legal_standard &&
+  typeof classifyResult.legal_standard === 'object' &&
+  !Array.isArray(classifyResult.legal_standard)
+    ? (classifyResult.legal_standard as { leq?: number; lmax?: number })
+    : classifyResult?.standards &&
+        typeof classifyResult.standards === 'object' &&
+        !Array.isArray(classifyResult.standards)
+      ? (classifyResult.standards as { leq?: number; lmax?: number })
+      : undefined;
 
   const aiChips = classifyResult
     ? [
-        classifyResult.primary_source ||
-          classifyResult.label ||
-          classifyResult.result ||
-          '주소음원 미분류',
-        classifyResult.secondary_source || '부소음원 없음',
+        getPrimarySource() || '주소음원 미분류',
+        getSecondarySource() || '부소음원 없음',
         classifyResult.noise_type ||
           classifyResult.category ||
           (measureType === 'impact' ? '직접충격' : '공기전달'),
