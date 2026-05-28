@@ -5,6 +5,8 @@ import { TabBar } from '../components/TabBar';
 import { Bell, AlertTriangle, Calendar, Activity, Moon, Mic } from 'lucide-react';
 import { apiGetHistory, mapRecord, isNighttime, type HistoryItem } from '../services/api';
 
+const strongFont = "'Space Grotesk', 'Pretendard', 'Noto Sans KR', sans-serif";
+
 function GlassCard({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
     <div style={{
@@ -47,18 +49,10 @@ export function HomePage() {
   useEffect(() => {
     apiGetHistory()
       .then(records => setHistory(records.map(mapRecord)))
-      .catch(() => {}); // 오류 시 빈 이력 유지
+      .catch(() => {});
   }, []);
 
-  // 최근 7일 통계 계산
-  const now = Date.now();
-  const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
-  const recent = history; // API가 이미 최근순으로 반환
-  const recentWeek = recent.filter(i => {
-    // measured_at 기반으로 필터하고 싶지만 HistoryItem은 time(문자열)만 있음
-    // → 전체 이력 사용 (간소화)
-    return true;
-  });
+  const recentWeek = history;
 
   const totalCount = recentWeek.length;
   const overCount = recentWeek.filter(i => i.over).length;
@@ -67,10 +61,7 @@ export function HomePage() {
     : 0;
   const nightOverCount = recentWeek.filter(i => i.over && i.period === '야간').length;
 
-  // 최근 측정값 (첫 번째 이력)
   const latest = history[0];
-
-  // 최근 3개만 홈에 표시
   const recentThree = history.slice(0, 3);
 
   return (
@@ -78,16 +69,15 @@ export function HomePage() {
       <Background />
 
       <div style={{ position: 'relative', zIndex: 2, flex: 1, overflowY: 'auto', padding: '20px 20px 100px' }}>
-        {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
           <div>
-            <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 22, fontWeight: 700, color: '#0A1866' }}>
-              소음<span style={{ color: '#1A3BDB' }}>ON</span>
+            <div style={{ fontFamily: strongFont, fontSize: 22, fontWeight: 800, color: '#0A1866' }}>
+              소음<span style={{ color: '#1A3BDB', fontWeight: 800 }}>ON</span>
             </div>
-            <div style={{ marginTop: 4, fontSize: 11, color: '#9AA6C0', fontWeight: 600 }}>{dateStr}</div>
+            <div style={{ marginTop: 4, fontSize: 11, color: '#9AA6C0', fontWeight: 700 }}>{dateStr}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ fontSize: 11, padding: '4px 12px', borderRadius: 999, border: '1px solid #cfd6ea', color: '#7A8AB8' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 999, border: '1px solid #cfd6ea', color: '#7A8AB8' }}>
               {timeLabel}
             </div>
             <div style={{ position: 'relative', fontSize: 18 }}>
@@ -99,21 +89,20 @@ export function HomePage() {
           </div>
         </div>
 
-        {/* Main Card */}
         <GlassCard style={{ marginTop: 12 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#8C98B8', marginBottom: 8 }}>최근 측정값</div>
+          <div style={{ fontSize: 13, fontWeight: 800, color: '#8C98B8', marginBottom: 8 }}>최근 측정값</div>
 
           {latest ? (
             <>
-              <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 72, lineHeight: 1, color: '#0A1A8C' }}>
+              <div style={{ fontFamily: strongFont, fontSize: 72, fontWeight: 800, lineHeight: 1, color: '#0A1A8C' }}>
                 {latest.db}{' '}
-                <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 18, color: '#9AA6C0', fontWeight: 500 }}>dB(A)</span>
+                <span style={{ fontFamily: strongFont, fontSize: 18, color: '#9AA6C0', fontWeight: 700 }}>dB(A)</span>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', marginTop: 12, gap: 10 }}>
                 <div style={{
                   display: 'inline-flex', alignItems: 'center', gap: 6,
-                  padding: '4px 10px', borderRadius: 999, fontSize: 11,
+                  padding: '4px 10px', borderRadius: 999, fontSize: 11, fontWeight: 800,
                   background: latest.over ? 'rgba(217,48,37,0.12)' : 'rgba(26,59,219,0.08)',
                   color: latest.over ? '#C0271E' : '#1A3BDB',
                   border: `1px solid ${latest.over ? 'rgba(217,48,37,0.25)' : 'rgba(26,59,219,0.15)'}`,
@@ -123,7 +112,7 @@ export function HomePage() {
                     ? `기준 초과 (+${Math.round((latest.db - (latest.leq_standard ?? 39)) * 10) / 10} dB)`
                     : '정상 범위'}
                 </div>
-                <div style={{ fontSize: 11, color: '#9AA6C0' }}>{latest.type} · {latest.period}</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#9AA6C0' }}>{latest.type} · {latest.period}</div>
               </div>
 
               <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
@@ -137,10 +126,10 @@ export function HomePage() {
                     border: '1px solid rgba(255,255,255,0.6)',
                     backdropFilter: 'blur(12px)',
                   }}>
-                    <div style={{ fontSize: 11, color: '#9AA6C0', marginBottom: 6 }}>{item.label}</div>
-                    <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 28, color: '#0A1A8C' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#9AA6C0', marginBottom: 6 }}>{item.label}</div>
+                    <div style={{ fontFamily: strongFont, fontSize: 28, fontWeight: 800, color: '#0A1A8C' }}>
                       {item.val}{' '}
-                      <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 12, color: '#9AA6C0' }}>dB</span>
+                      <span style={{ fontFamily: strongFont, fontSize: 12, fontWeight: 700, color: '#9AA6C0' }}>dB</span>
                     </div>
                     <div style={{ height: 6, background: '#e5e9f5', borderRadius: 6, marginTop: 8, overflow: 'hidden' }}>
                       <div style={{ width: `${item.pct}%`, height: '100%', borderRadius: 6, background: item.pct > 60 ? 'linear-gradient(90deg, #ff6b6b, #D93025)' : 'linear-gradient(90deg, #4B6EFF, #1A3BDB)' }} />
@@ -150,14 +139,13 @@ export function HomePage() {
               </div>
             </>
           ) : (
-            <div style={{ paddingTop: 12, paddingBottom: 8, fontSize: 13, color: '#9AA6C0', textAlign: 'center' }}>
+            <div style={{ paddingTop: 12, paddingBottom: 8, fontSize: 13, fontWeight: 700, color: '#9AA6C0', textAlign: 'center' }}>
               아직 측정 이력이 없습니다.
             </div>
           )}
         </GlassCard>
 
-        {/* Weekly Stats */}
-        <div style={{ marginTop: 26, marginBottom: 12, fontSize: 14, fontWeight: 600, color: '#8C98B8' }}>누적 통계</div>
+        <div style={{ marginTop: 26, marginBottom: 12, fontSize: 14, fontWeight: 800, color: '#8C98B8' }}>누적 통계</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           {[
             {
@@ -194,18 +182,17 @@ export function HomePage() {
               <div style={{ width: 32, height: 32, borderRadius: 10, background: stat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
                 {stat.icon}
               </div>
-              <div style={{ fontSize: 11, fontWeight: 500, color: '#9AA6C0', marginBottom: 4 }}>{stat.label}</div>
-              <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 20, fontWeight: 700, color: stat.valColor, lineHeight: 1 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: '#9AA6C0', marginBottom: 4 }}>{stat.label}</div>
+              <div style={{ fontFamily: strongFont, fontSize: 20, fontWeight: 800, color: stat.valColor, lineHeight: 1 }}>
                 {stat.val}
-                {'unit' in stat && stat.unit && <span style={{ fontSize: 12, fontWeight: 500, color: '#9AA6C0', marginLeft: 2 }}>{stat.unit}</span>}
+                {'unit' in stat && stat.unit && <span style={{ fontSize: 12, fontWeight: 700, color: '#9AA6C0', marginLeft: 2 }}>{stat.unit}</span>}
               </div>
-              <div style={{ fontSize: 10, color: '#9AA6C0', marginTop: 4 }}>{stat.sub}</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#9AA6C0', marginTop: 4 }}>{stat.sub}</div>
             </GlassCardSm>
           ))}
         </div>
 
-        {/* Recent History */}
-        <div style={{ marginTop: 26, marginBottom: 12, fontSize: 14, fontWeight: 600, color: '#8C98B8' }}>최근 이력</div>
+        <div style={{ marginTop: 26, marginBottom: 12, fontSize: 14, fontWeight: 800, color: '#8C98B8' }}>최근 이력</div>
         {recentThree.length > 0 ? (
           <GlassCardSm style={{ padding: '8px 16px' }}>
             {recentThree.map((item, idx) => (
@@ -218,17 +205,17 @@ export function HomePage() {
                 }}
               >
                 <div style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: item.over ? '#D93025' : '#1A3BDB' }} />
-                <div style={{ fontSize: 11, color: '#9AA6C0', width: 70, flexShrink: 0 }}>{item.time}</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#9AA6C0', width: 70, flexShrink: 0 }}>{item.time}</div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 13, fontWeight: 600, color: '#0A1A8C' }}>
+                  <div style={{ fontFamily: strongFont, fontSize: 13, fontWeight: 800, color: '#0A1A8C' }}>
                     {item.db} dB(A)
                   </div>
-                  <div style={{ fontSize: 10, color: '#9AA6C0', marginTop: 2 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#9AA6C0', marginTop: 2 }}>
                     {item.type} · Lmax {item.lmax} dB
                   </div>
                 </div>
                 <div style={{
-                  fontSize: 10, fontWeight: 600, padding: '3px 10px', borderRadius: 999,
+                  fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 999,
                   background: item.over ? 'rgba(217,48,37,0.1)' : 'rgba(26,59,219,0.08)',
                   color: item.over ? '#C0271E' : '#1A3BDB',
                 }}>
@@ -239,12 +226,11 @@ export function HomePage() {
           </GlassCardSm>
         ) : (
           <GlassCardSm style={{ padding: '20px 16px', textAlign: 'center' }}>
-            <div style={{ fontSize: 13, color: '#9AA6C0' }}>아직 측정 이력이 없습니다.</div>
-            <div style={{ fontSize: 11, color: '#B0B8D0', marginTop: 4 }}>측정을 시작해보세요!</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#9AA6C0' }}>아직 측정 이력이 없습니다.</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#B0B8D0', marginTop: 4 }}>측정을 시작해보세요!</div>
           </GlassCardSm>
         )}
 
-        {/* CTA Button */}
         <button
           onClick={() => navigate('/measure')}
           style={{
@@ -252,8 +238,8 @@ export function HomePage() {
             borderRadius: 999,
             background: 'linear-gradient(135deg, #2D52F0, #1A3BDB)',
             color: '#fff', border: 'none', cursor: 'pointer',
-            fontFamily: "'Space Grotesk', sans-serif",
-            fontSize: 15, fontWeight: 600,
+            fontFamily: strongFont,
+            fontSize: 15, fontWeight: 800,
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
             boxShadow: '0 10px 30px rgba(26,59,219,0.25)',
           }}

@@ -62,6 +62,46 @@ export type NoiseMeasureRequest = {
   secondary_source?: string;
 };
 
+export type NoiseClassifyResponse = {
+  noise_type?: string;
+  primary_source?: string;
+  secondary_source?: string;
+  time_zone?: string;
+  leq_standard?: number;
+  lmax_standard?: number | null;
+  is_exceeded?: boolean;
+  [key: string]: any;
+};
+
+export async function apiClassifyNoise(file: File) {
+  const token = getToken();
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetch(`${API_BASE_URL}/noise/classify`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  let data: any = null;
+
+  try {
+    data = await res.json();
+  } catch {
+    data = null;
+  }
+
+  if (!res.ok) {
+    throw new Error(data?.detail || data?.message || `소음 분류 실패 (${res.status})`);
+  }
+
+  return data as NoiseClassifyResponse;
+}
+
 export type NoiseRecord = {
   _id: string;
   email?: string;
