@@ -4,6 +4,9 @@ from datetime import datetime
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfbase import pdfmetrics
+from pydantic import BaseModel
+from typing import List, Optional
+from bson import ObjectId
 import os
 
 from database import noise_collection
@@ -11,15 +14,26 @@ from routes.auth import get_current_user
 
 router = APIRouter()
 
+class TargetInfo(BaseModel):
+    location: Optional[str] = None
+    address: Optional[str] = None
 
-@router.get("/pdf")
+class ReportRequest(BaseModel):
+    selected_record_ids: List[str]
+    target: Optional[TargetInfo] = None
+
+
+@router.post("/pdf")
 async def create_noise_report_pdf(
+    request: ReportRequest,
     current_user: dict = Depends(get_current_user)
 ):
     email = current_user.get("email")
 
+    # 선택한 id로 기록 조회
+    object_ids = [ObjectId(id) for id in request.selected_record_ids]
     records = []
-    cursor = noise_collection.find({"email": email}).sort("measured_at", -1)
+    cursor = noise_collection.find({"_id": {"$in": object_ids}, "email": email})
 
     async for record in cursor:
         records.append(record)
@@ -32,7 +46,6 @@ async def create_noise_report_pdf(
     pdf = canvas.Canvas(filename)
     pdf.setTitle("NoiseGuard 소음 민원서")
 
-    # 한글 폰트
     font_path = os.path.join(os.path.dirname(__file__), "..", "fonts", "NANUMGOTHIC.TTF")
     pdfmetrics.registerFont(TTFont("NanumGothic", font_path))
     pdf.setFont("NanumGothic", 14)
@@ -46,7 +59,17 @@ async def create_noise_report_pdf(
     pdf.drawString(50, y, f"작성자 이메일: {email}")
     y -= 25
     pdf.drawString(50, y, f"생성일시: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    y -= 40
+    y -= 25
+
+    if request.target:
+        if request.target.location:
+            pdf.drawString(50, y, f"소음 발생 위치: {request.target.location}")
+            y -= 25
+        if request.target.address:
+            pdf.drawString(50, y, f"주소: {request.target.address}")
+            y -= 25
+
+    y -= 15
 
     pdf.setFont("NanumGothic", 12)
     pdf.drawString(50, y, "1. 소음 기록 요약")
@@ -58,7 +81,7 @@ async def create_noise_report_pdf(
         pdf.drawString(50, y, "저장된 소음 기록이 없습니다.")
         y -= 25
     else:
-        for idx, record in enumerate(records[:10], start=1):
+        for idx, record in enumerate(records, start=1):
             measured_at = record.get("measured_at", "")
             if hasattr(measured_at, "strftime"):
                 measured_at = measured_at.strftime("%Y-%m-%d %H:%M:%S")
