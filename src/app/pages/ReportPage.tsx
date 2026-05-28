@@ -390,7 +390,6 @@ export function ReportPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {filtered.map(item => {
               const checked = selectedIds.includes(item.id);
-              const hasPrimarySource = isValidSource(item.primary_source);
               const hasSecondarySource = isValidSource(item.secondary_source);
 
               return (
@@ -477,15 +476,12 @@ export function ReportPage() {
                     </div>
 
                     <div style={{ fontSize: 11, color: '#9AA6C0' }}>
-                      {item.time} · {item.type} · {item.period} · Lmax{' '}
-                      {item.lmax} dB
+                      {item.time} · {item.type} · {item.period} · Lmax {item.lmax} dB
                     </div>
 
-                    {(hasPrimarySource || hasSecondarySource) && (
+                    {hasSecondarySource && (
                       <div style={{ fontSize: 10, color: '#7A8AB8', marginTop: 4 }}>
-                        {hasPrimarySource && `주소음원: ${item.primary_source}`}
-                        {hasPrimarySource && hasSecondarySource && ' / '}
-                        {hasSecondarySource && `부소음원: ${item.secondary_source}`}
+                        세부 소음원: {item.secondary_source}
                       </div>
                     )}
                   </div>

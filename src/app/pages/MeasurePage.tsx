@@ -379,7 +379,8 @@ export function MeasurePage() {
       classifyResult.label ||
       classifyResult.predicted_class ||
       classifyResult.category ||
-      (typeof classifyResult.result === 'string' ? classifyResult.result : undefined);
+      classifyResult.description ||
+      (typeof classifyResult.result === 'string' ? classifyResult.result : undefined)
 
     return isValidSource(source) ? source : undefined;
   }
@@ -387,9 +388,12 @@ export function MeasurePage() {
   function getSecondarySource() {
     if (!classifyResult) return undefined;
 
-    const source = classifyResult.secondary_source || classifyResult.sub_label;
-
-    return isValidSource(source) ? source : undefined;
+    return (
+      classifyResult.secondary_source ||
+      classifyResult.description ||
+      classifyResult.sub_label ||
+      (typeof classifyResult.result === 'string' ? classifyResult.result : undefined)
+    );
   }
 
   function getDetectedNoiseType(): NoiseType {
@@ -423,7 +427,6 @@ export function MeasurePage() {
         leq,
         lmax,
         noise_type,
-        primary_source: getPrimarySource() || '분류 안 됨',
         secondary_source: getSecondarySource() || '없음',
       });
 

@@ -112,6 +112,8 @@ export type NoiseClassifyResponse = {
   primary_source?: string;
   secondary_source?: string;
 
+  description?: string;
+
   label?: string;
   category?: string;
   predicted_class?: string;
@@ -121,11 +123,15 @@ export type NoiseClassifyResponse = {
   legal_standard?: {
     leq?: number;
     lmax?: number | null;
+    주간_leq?: number;
+    야간_leq?: number;
   };
 
   standards?: {
     leq?: number;
     lmax?: number | null;
+    주간_leq?: number;
+    야간_leq?: number;
   };
 };
 
@@ -258,7 +264,6 @@ export async function apiSaveMeasure(data: {
   is_violation?: boolean;
   memo?: string;
   noise_type?: NoiseType;
-  primary_source?: string;
   secondary_source?: string;
 }) {
   return request<{ message: string; record: NoiseRecord }>('/noise/measure', {
@@ -269,7 +274,6 @@ export async function apiSaveMeasure(data: {
       noise_type:
         data.noise_type ??
         (data.measure_type === 'airborne' ? '공기전달' : '직접충격'),
-      primary_source: data.primary_source ?? '분류 안 됨',
       secondary_source: data.secondary_source ?? '없음',
     }),
   });
@@ -316,7 +320,7 @@ export async function apiClassifyNoise(file: File) {
     throw new Error(message);
   }
 
-  return data as NoiseClassifyResponse;
+  return (data?.data ?? data) as NoiseClassifyResponse;
 }
 
 export async function apiSendChatbotMessage(
