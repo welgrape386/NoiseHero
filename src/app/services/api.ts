@@ -362,10 +362,12 @@ function formatDateTime(value?: string) {
 
   let normalized = value;
 
+  // 백엔드가 timezone 없이 UTC 시간을 주는 경우
+  // 예: 2026-05-28T06:30:00 → UTC로 해석해야 한국시간 15:30 표시됨
   const hasTimezone = /Z$|[+-]\d{2}:\d{2}$/.test(value);
 
   if (!hasTimezone && value.includes('T')) {
-    normalized = `${value}+09:00`;
+    normalized = `${value}Z`;
   }
 
   const date = new Date(normalized);
