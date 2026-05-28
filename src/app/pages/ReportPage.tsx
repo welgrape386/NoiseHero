@@ -103,7 +103,13 @@ export function ReportPage() {
   setPdfUrl('');
 
   try {
-    const blob = await apiCreateReportPdf();
+    const blob = await apiCreateReportPdf({
+      selected_record_ids: selectedIds,
+      target: {
+        location: targetLocation,
+        address: targetAddress,
+      },
+    });
     const url = window.URL.createObjectURL(blob);
 
     setPdfUrl(url);

@@ -84,6 +84,7 @@ export type HistoryItem = {
   type: string;
   period: string;
   time: string;
+  measured_at: string;
   over: boolean;
   leq_standard?: number;
   lmax_standard?: number | null;
@@ -122,7 +123,6 @@ export type NoiseClassifyResponse = {
     lmax_standard?: number | null;
   };
 };
-
 export type ReportTargetInfo = {
   location: string;
   address: string;
@@ -348,6 +348,7 @@ export function mapRecord(record: NoiseRecord): HistoryItem {
     lmax_standard: record.lmax_standard,
     primary_source: record.primary_source,
     secondary_source: record.secondary_source,
+    measured_at: record.measured_at,
   };
 }
 
