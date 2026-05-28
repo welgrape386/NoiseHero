@@ -108,24 +108,40 @@ export type ChatbotResponse = {
 };
 
 export type NoiseClassifyResponse = {
-  noise_type?: NoiseType;
+  noise_type?: NoiseType | string;
   primary_source?: string;
   secondary_source?: string;
-  time_zone?: string;
-  leq_standard?: number;
-  lmax_standard?: number | null;
-  result?: {
-    noise_type?: NoiseType;
-    primary_source?: string;
-    secondary_source?: string;
-    time_zone?: string;
-    leq_standard?: number;
-    lmax_standard?: number | null;
+  result?: string;
+  label?: string;
+  category?: string;
+  confidence?: number;
+  legal_standard?: {
+    leq?: number;
+    lmax?: number | null;
   };
+  standards?: {
+    leq?: number;
+    lmax?: number | null;
+  };
+  message?: string;
 };
+
 export type ReportTargetInfo = {
   location: string;
   address: string;
+};
+
+export type ReportNoiseRecord = {
+  measured_at: string;
+  noise_type: string;
+  time_zone: string;
+  primary_source?: string;
+  secondary_source?: string;
+  leq: number;
+  lmax: number;
+  leq_standard: number;
+  lmax_standard?: number | null;
+  is_exceeded: boolean;
 };
 
 export type ReportPdfRequest = {
@@ -267,11 +283,15 @@ export async function apiClassifyNoise(file: File) {
   const formData = new FormData();
   formData.append('file', file);
 
+  const headers: Record<string, string> = {};
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
   const res = await fetch(`${API_BASE_URL}/noise/classify`, {
     method: 'POST',
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers,
     body: formData,
   });
 
@@ -283,7 +303,7 @@ export async function apiClassifyNoise(file: File) {
     data = null;
   }
 
-  if (!res.ok) {
+  if (!res.ok || data?.success === false) {
     const message =
       data?.detail ||
       data?.error ||
@@ -312,22 +332,34 @@ export async function apiSendChatbotMessage(
 export async function apiCreateReportPdf(payload: ReportPdfRequest) {
   const token = getToken();
 
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
   const res = await fetch(`${API_BASE_URL}/report/pdf`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers,
     body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
-    let message = `PDF 생성 실패 (${res.status})`;
+    let data: any = null;
 
     try {
-      const data = await res.json();
-      message = data?.detail || data?.message || data?.error || message;
-    } catch {}
+      data = await res.json();
+    } catch {
+      data = null;
+    }
+
+    const message =
+      data?.detail ||
+      data?.error ||
+      data?.message ||
+      `PDF 생성 실패 (${res.status})`;
 
     throw new Error(message);
   }
@@ -352,9 +384,31 @@ export function mapRecord(record: NoiseRecord): HistoryItem {
   };
 }
 
+export function mapRecordForReport(record: NoiseRecord): ReportNoiseRecord {
+  return {
+    measured_at: record.measured_at,
+    noise_type: record.noise_type,
+    time_zone: record.time_zone,
+    primary_source: record.primary_source,
+    secondary_source: record.secondary_source,
+    leq: record.leq,
+    lmax: record.lmax,
+    leq_standard: record.leq_standard,
+    lmax_standard: record.lmax_standard,
+    is_exceeded: record.is_exceeded,
+  };
+}
+
 export function isNighttime(date = new Date()) {
-  const hour = date.getHours();
-  return hour >= 22 || hour < 6;
+  const koreaHour = Number(
+    date.toLocaleString('ko-KR', {
+      timeZone: 'Asia/Seoul',
+      hour: '2-digit',
+      hour12: false,
+    })
+  );
+
+  return koreaHour >= 22 || koreaHour < 6;
 }
 
 function formatDateTime(value?: string) {
@@ -362,8 +416,6 @@ function formatDateTime(value?: string) {
 
   let normalized = value;
 
-  // 백엔드가 timezone 없이 UTC 시간을 주는 경우
-  // 예: 2026-05-28T06:30:00 → UTC로 해석해야 한국시간 15:30 표시됨
   const hasTimezone = /Z$|[+-]\d{2}:\d{2}$/.test(value);
 
   if (!hasTimezone && value.includes('T')) {

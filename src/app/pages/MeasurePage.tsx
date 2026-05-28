@@ -170,34 +170,23 @@ export function MeasurePage() {
   async function handleClassifyFile(file: File) {
     const maxSize = 20 * 1024 * 1024;
 
-    if (file.size > maxSize) {
-      setClassifyError('파일 용량이 너무 큽니다. 20MB 이하 오디오 파일을 업로드해 주세요.');
-      return;
+    const raw = await apiClassifyNoise(file);
+
+    const result: NoiseClassifyResponse =
+      typeof raw.result === 'object' && raw.result !== null
+        ? raw.result
+        : raw;
+
+    setClassifyResult(result);
+
+    const detectedNoiseType = result.noise_type || result.category;
+
+    if (detectedNoiseType === '공기전달') {
+      setMeasureType('airborne');
     }
 
-    setAudioFile(file);
-    setClassifyResult(null);
-    setClassifyError('');
-    setClassifying(true);
-
-    try {
-      const raw = await apiClassifyNoise(file);
-      const result = raw.result ?? raw;
-
-      setClassifyResult(result);
-
-      if (result.noise_type === '공기전달') {
-        setMeasureType('airborne');
-      }
-
-      if (result.noise_type === '직접충격') {
-        setMeasureType('impact');
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : '소음 분류에 실패했습니다.';
-      setClassifyError(msg);
-    } finally {
-      setClassifying(false);
+    if (detectedNoiseType === '직접충격') {
+      setMeasureType('impact');
     }
   }
 
@@ -278,7 +267,12 @@ export function MeasurePage() {
         leq,
         lmax,
         noise_type,
-        primary_source: classifyResult?.primary_source,
+        primary_source:
+          classifyResult?.primary_source ||
+          classifyResult?.label ||
+          classifyResult?.result ||
+          classifyResult?.category ||
+          undefined,
         secondary_source: classifyResult?.secondary_source,
       });
 
@@ -321,18 +315,25 @@ export function MeasurePage() {
     elapsed % 60
   ).padStart(2, '0')}`;
 
+  const standard = classifyResult?.legal_standard ?? classifyResult?.standards;
+
   const aiChips = classifyResult
     ? [
-        classifyResult.primary_source || '주소음원 미분류',
+        classifyResult.primary_source ||
+          classifyResult.label ||
+          classifyResult.result ||
+          '주소음원 미분류',
         classifyResult.secondary_source || '부소음원 없음',
-        classifyResult.noise_type || (measureType === 'impact' ? '직접충격' : '공기전달'),
-        classifyResult.time_zone || limits.label,
-        classifyResult.leq_standard
-          ? `Leq 기준 ${classifyResult.leq_standard}dB`
-          : `Leq 기준 ${limits.leqLimit}dB`,
-        classifyResult.lmax_standard
-          ? `Lmax 기준 ${classifyResult.lmax_standard}dB`
-          : 'Lmax 미적용',
+        classifyResult.noise_type ||
+          classifyResult.category ||
+          (measureType === 'impact' ? '직접충격' : '공기전달'),
+        `${limits.label} 기준`,
+        `Leq 기준 ${standard?.leq ?? limits.leqLimit}dB`,
+        standard?.lmax
+          ? `Lmax 기준 ${standard.lmax}dB`
+          : limits.lmaxLimit
+            ? `Lmax 기준 ${limits.lmaxLimit}dB`
+            : 'Lmax 미적용',
       ]
     : [
         '분류 전',
