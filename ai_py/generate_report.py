@@ -1,8 +1,14 @@
 from openai import OpenAI
 from prompts.legal import search_legal
+from datetime import date
 import json
 
-client = OpenAI(api_key="api키")
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 
 # =============================================
 # [백엔드 GET /auth/me 에서 가져오는 데이터]
@@ -93,6 +99,36 @@ for i, r in enumerate(selected_records, 1):
 """
 
 # =============================================
+# [통계 요약 자동 계산] ← 추가된 부분
+# =============================================
+
+total_count = len(selected_records)
+exceeded_count = sum(1 for r in selected_records if r['is_exceeded'])
+exceed_rate = round(exceeded_count / total_count * 100, 1)
+
+avg_leq = round(sum(r['leq'] for r in selected_records) / total_count, 1)
+avg_lmax = round(sum(r['lmax'] for r in selected_records) / total_count, 1)
+
+max_leq_record = max(selected_records, key=lambda r: r['leq'])
+max_lmax_record = max(selected_records, key=lambda r: r['lmax'])
+
+# 주간/야간 횟수
+daytime_count = sum(1 for r in selected_records if r['time_zone'] == '주간')
+nighttime_count = sum(1 for r in selected_records if r['time_zone'] == '야간')
+
+# 작성일 (오늘 날짜 자동 생성)
+created_at = str(date.today())
+
+stats_text = f"""
+- 총 측정 횟수: {total_count}회
+- 기준 초과 횟수: {exceeded_count}회 (초과율 {exceed_rate}%)
+- 평균 Leq: {avg_leq}dB / 평균 Lmax: {avg_lmax}dB
+- 최대 Leq: {max_leq_record['leq']}dB ({max_leq_record['measured_at']})
+- 최대 Lmax: {max_lmax_record['lmax']}dB ({max_lmax_record['measured_at']})
+- 주간 발생: {daytime_count}회 / 야간 발생: {nighttime_count}회
+"""
+
+# =============================================
 # FAISS로 민원서 관련 법령 검색
 # =============================================
 legal_context = search_legal("층간소음 법적 기준 직접충격 야간 민원서")
@@ -100,7 +136,7 @@ legal_context = search_legal("층간소음 법적 기준 직접충격 야간 민
 # =============================================
 # [GPT 프롬프트 설정]
 # =============================================
-DISCLAIMER = "※ 본 문서는 AI가 작성한 초안이며 최종 제출 책임은 신청인에게 있습니다."
+DISCLAIMER = "※ 본 문서는 참고용이며 법적 효력을 보장하지 않습니다. 정확한 판단은 전문 기관에 문의하세요."
 
 system_prompt = f"""
 당신은 층간소음 피해자를 위한 민원서 작성 전문가입니다.
@@ -112,11 +148,20 @@ system_prompt = f"""
 3. 소음 이력이 여러 건인 경우 반복적·지속적 피해임을 강조
 4. damage_summary는 반드시 100자 이내로 작성
 5. conclusion의 각 항목은 2문장 이상 구체적으로 작성
+6. statistics는 전달받은 수치를 그대로 사용할 것. 임의로 수정 금지.
+7. noise_records의 leq_exceeded, lmax_exceeded는 반드시 소수점 1자리로 작성
+8. statistics의 숫자 필드(total_count, exceeded_count, exceed_rate, avg_leq, avg_lmax, max_leq, max_lmax, daytime_count, nighttime_count)는 단위 없이 숫자형으로만 작성
+9. created_at은 전달받은 작성일을 그대로 사용할 것
+10. conclusion 작성 규칙:
+    - site_inspection: 피해 세대 동·호수를 명시하고 방문 진단을 구체적으로 요청할 것
+    - noise_measurement: 주/야간 측정 모두 요청하고 전문 장비 사용을 명시할 것
+    - prevention: 상대세대에 대한 경고 조치 및 재발 방지 방안을 구체적으로 요청할 것
+11. 모든 텍스트는 반드시 한국어로만 작성할 것. 다른 언어 문자 절대 포함 금지.
 
 응답 JSON 구조:
 {{
   "title": "층간소음 피해 현장진단 신청서",
-  "created_at": "마지막 측정일",
+  "created_at": "작성일 (YYYY-MM-DD 형식)",
   "applicant": {{
     "nickname": "신청인 닉네임",
     "apartment_name": "아파트명",
@@ -151,13 +196,26 @@ system_prompt = f"""
       "lmax_exceeded": 0.0
     }}
   ],
+  "statistics": {{
+    "total_count": 0,
+    "exceeded_count": 0,
+    "exceed_rate": 0.0,
+    "avg_leq": 0.0,
+    "avg_lmax": 0.0,
+    "max_leq": 0.0,
+    "max_leq_at": "최대 Leq 발생 일시",
+    "max_lmax": 0.0,
+    "max_lmax_at": "최대 Lmax 발생 일시",
+    "daytime_count": 0,
+    "nighttime_count": 0
+  }},
   "damage_summary": "피해기간: OO, 피해시간: OO (100자 이내)",
   "conclusion": {{
-    "site_inspection": "현장진단 요청 내용 (2문장 이상)",
-    "noise_measurement": "소음 측정 요청 내용 (2문장 이상)",
-    "prevention": "재발 방지 조치 요청 내용 (2문장 이상)"
+    "site_inspection": "현장진단 요청 내용 (2문장 이상, 구체적으로)",
+    "noise_measurement": "소음 측정 요청 내용 (2문장 이상, 구체적으로)",
+    "prevention": "재발 방지 조치 요청 내용 (2문장 이상, 구체적으로)"
   }},
-  "disclaimer": "※ 본 문서는 AI가 작성한 초안이며 최종 제출 책임은 신청인에게 있습니다."
+  "disclaimer": "※ 본 문서는 참고용이며 법적 효력을 보장하지 않습니다. 정확한 판단은 전문 기관에 문의하세요."
 }}
 
 [참고 법령]
@@ -166,6 +224,9 @@ system_prompt = f"""
 
 user_prompt = f"""
 아래 정보를 바탕으로 이웃사이센터 제출용 층간소음 현장진단 신청서를 JSON으로 작성해주세요.
+
+[문서 기본 정보]
+- 작성일: {created_at}
 
 [신청인 정보]
 - 닉네임: {user_info['nickname']}
@@ -182,15 +243,20 @@ user_prompt = f"""
 [건물 정보]
 - 건설사: {user_info['building_company']}
 - 슬라브 두께: {user_info['slab_thickness']}
-- 구조: {user_info['structure']}
+- 건물 구조: {user_info['structure']}
 - 층간소음위원회: {user_info['committee']}
 - 관리사무소: {user_info['management_office']}
 
-[소음 측정 이력 - 총 {len(selected_records)}건 / 피해기간: {period}]
+[소음 측정 이력 - 총 {total_count}건 / 피해기간: {period}]
 {history_text}
 
+[통계 요약 - 아래 수치를 statistics 필드에 그대로 사용할 것]
+{stats_text}
+
 피해내용은 반드시 아래 형식으로 작성 (100자 이내):
-"피해기간: 약 {len(selected_records)}일 ({first_date}~{last_date}), 피해시간: {daynight_str} {time_range}"
+"피해기간: 약 {total_count}일 ({first_date}~{last_date}), 피해시간: {daynight_str} {time_range}"
+
+conclusion 작성 시 통계 수치(초과율 {exceed_rate}%, 평균 Leq {avg_leq}dB 등)를 구체적으로 언급할 것.
 """
 
 # =============================================
@@ -208,7 +274,6 @@ result = response.choices[0].message.content
 
 # JSON 파싱
 try:
-    # 백틱 제거 후 파싱
     clean = result.replace("```json", "").replace("```", "").strip()
     report_json = json.loads(clean)
     print("===== 민원서 JSON (백엔드 전달용) =====")
