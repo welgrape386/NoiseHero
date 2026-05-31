@@ -118,13 +118,66 @@ export function ReportPage() {
     setPdfUrl('');
 
     try {
+      const selectedRecords = history.filter(item => selectedIds.includes(item.id));
+
+      const exceededCount = selectedRecords.filter(r => r.over).length;
+
       const blob = await apiCreateReportPdf({
-        selected_record_ids: selectedIds,
+        title: '층간소음 피해 현장진단 신청서',
+        created_at: new Date().toISOString().slice(0, 10),
+
+        applicant: {
+          nickname: userInfo.nickname || '',
+          apartment_name: userInfo.apartment_name || '',
+          dong: userInfo.dong || '',
+          ho: userInfo.ho || '',
+          floor: String(userInfo.floor ?? ''),
+          management_phone: userInfo.management_phone || '',
+        },
+
         target: {
           location: targetLocation,
           address: targetAddress,
         },
-      });
+
+        noise_records: selectedRecords.map(item => ({
+          measured_at: item.measured_at || '',
+          time_zone: item.period,
+          noise_type: item.type,
+          primary_source: item.primary_source || '',
+          secondary_source: item.secondary_source || '',
+          leq: item.db,
+          lmax: item.lmax,
+          leq_standard: item.leq_standard || 0,
+          lmax_standard: item.lmax_standard || 0,
+          leq_exceeded: item.db - (item.leq_standard || 0),
+          lmax_exceeded: item.lmax - (item.lmax_standard || 0),
+        })),
+
+        statistics: {
+          total_count: selectedRecords.length,
+          exceeded_count: exceededCount,
+          exceed_rate: selectedRecords.length ? Number(((exceededCount / selectedRecords.length) * 100).toFixed(1)) : 0,
+          avg_leq: selectedRecords.length ? Number((selectedRecords.reduce((a, b) => a + b.db, 0) / selectedRecords.length).toFixed(1)) : 0,
+          avg_lmax: selectedRecords.length ? Number((selectedRecords.reduce((a, b) => a + b.lmax, 0) / selectedRecords.length).toFixed(1)) : 0,
+          max_leq: Math.max(...selectedRecords.map(r => r.db)),
+          max_leq_at: [...selectedRecords].sort((a,b)=>b.db-a.db)[0]?.measured_at || '',
+          max_lmax: Math.max(...selectedRecords.map(r => r.lmax)),
+          max_lmax_at: [...selectedRecords].sort((a,b)=>b.lmax-a.lmax)[0]?.measured_at || '',
+          daytime_count: selectedRecords.filter(r => r.period === '주간').length,
+          nighttime_count: selectedRecords.filter(r => r.period === '야간').length,
+        },
+
+        damage_summary: `피해기간: 약 ${selectedRecords.length}일`,
+
+        conclusion: {
+          site_inspection: `${userInfo.apartment_name || ''} ${userInfo.dong || ''}동 ${userInfo.ho || ''}호의 피해 세대에 대한 현장 진단을 요청합니다.`,
+          noise_measurement: '주간 및 야간의 소음 측정을 요청합니다.',
+          prevention: '상대 세대에 대한 경고 조치와 재발 방지 방안을 마련해 주실 것을 요청합니다.',
+        },
+
+        disclaimer: '※ 본 문서는 참고용이며 법적 효력을 보장하지 않습니다.'
+      } as any);
 
       const url = window.URL.createObjectURL(blob);
 
