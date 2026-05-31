@@ -244,17 +244,14 @@ export function ReportPage() {
                 {userInfo.nickname || userInfo.email} ·{' '}
                 {userInfo.apartment_name || '아파트 미입력'}
               </div>
+
               <div>
                 {userInfo.dong || '-'}동 {userInfo.ho || '-'}호 ·{' '}
                 {userInfo.floor ?? '-'}층
               </div>
+
               <div>
-                건설사: {userInfo.building_company || '미입력'} / 구조:{' '}
-                {userInfo.structure || '미입력'}
-              </div>
-              <div>
-                슬라브 두께: {userInfo.slab_thickness || '미입력'} / 관리사무소:{' '}
-                {userInfo.management_office || '미입력'}
+                관리사무소: {userInfo.management_office || '미입력'}
               </div>
             </div>
           ) : (
