@@ -265,6 +265,7 @@ export async function apiSaveMeasure(data: {
   memo?: string;
   noise_type?: NoiseType;
   secondary_source?: string;
+  primary_source?: string;
 }) {
   return request<{ message: string; record: NoiseRecord }>('/noise/measure', {
     method: 'POST',
@@ -274,7 +275,9 @@ export async function apiSaveMeasure(data: {
       noise_type:
         data.noise_type ??
         (data.measure_type === 'airborne' ? '공기전달' : '직접충격'),
-      secondary_source: data.secondary_source ?? '없음',
+
+      primary_source: data.primary_source,
+      secondary_source: data.secondary_source,
     }),
   });
 }

@@ -9,6 +9,7 @@ import {
   Square,
   CheckCircle,
   Mic,
+  Upload,
 } from 'lucide-react';
 import {
   apiSaveMeasure,
@@ -16,10 +17,10 @@ import {
   LEGAL_STANDARDS,
   isNighttime,
   type NoiseClassifyResponse,
+  type NoiseType,
 } from '../services/api';
 
 type MeasureType = 'impact' | 'airborne';
-type NoiseType = '직접충격' | '공기전달';
 type MeasureState = 'idle' | 'measuring' | 'done';
 
 const strongFont = "'Space Grotesk', 'Pretendard', 'Noto Sans KR', sans-serif";
@@ -86,10 +87,6 @@ class MicrophoneAnalyzer {
     this.rafId = requestAnimationFrame(this.analyze);
   };
 
-  getStream() {
-    return this.stream;
-  }
-
   stop() {
     if (this.rafId) cancelAnimationFrame(this.rafId);
     if (this.microphone) this.microphone.disconnect();
@@ -142,37 +139,6 @@ function getLimits(type: MeasureType) {
   };
 }
 
-function isValidSource(value?: string) {
-  if (!value) return false;
-
-  const trimmed = value.trim();
-
-  return (
-    trimmed !== '' &&
-    trimmed !== '분류 안 됨' &&
-    trimmed !== '주소음원 미분류' &&
-    trimmed !== '미분류' &&
-    trimmed !== '없음' &&
-    trimmed !== '부소음원 없음' &&
-    trimmed !== 'undefined' &&
-    trimmed !== 'null'
-  );
-}
-
-function normalizeNoiseType(value?: string): NoiseType | undefined {
-  if (!value) return undefined;
-
-  if (value.includes('공기전달') || value.includes('공기')) {
-    return '공기전달';
-  }
-
-  if (value.includes('직접충격') || value.includes('충격')) {
-    return '직접충격';
-  }
-
-  return undefined;
-}
-
 export function MeasurePage() {
   const navigate = useNavigate();
 
@@ -187,7 +153,6 @@ export function MeasurePage() {
   const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
   const [micError, setMicError] = useState('');
-  const [calibration, setCalibration] = useState(0);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
@@ -203,70 +168,58 @@ export function MeasurePage() {
 
   const duration = measureType === 'impact' ? 60 : 300;
   const limits = getLimits(measureType);
-  
 
-  async function classifyRecordedAudio(file: File) {
-    const maxSize = 20 * 1024 * 1024;
+  async function handleClassifyFile(file: File) {
+  const maxSize = 20 * 1024 * 1024;
 
-    setAudioFile(file);
+  setAudioFile(file);
 
-    if (file.size > maxSize) {
-      setClassifyError('파일 용량이 너무 큽니다. 20MB 이하 파일만 업로드해 주세요.');
-      setClassifyResult(null);
-      return;
-    }
-
-    setClassifying(true);
-    setClassifyError('');
-    setClassifyResult(null);
-
-    try {
-      const raw = await apiClassifyNoise(file);
-
-      const result: NoiseClassifyResponse =
-        raw.result &&
-        typeof raw.result === 'object' &&
-        !Array.isArray(raw.result)
-          ? (raw.result as NoiseClassifyResponse)
-          : raw;
-
-      setClassifyResult(result);
-
-      const detectedNoiseType = normalizeNoiseType(
-        result.noise_type ||
-          result.category ||
-          result.label ||
-          result.predicted_class
-      );
-
-      if (detectedNoiseType === '공기전달') {
-        setMeasureType('airborne');
-      }
-
-      if (detectedNoiseType === '직접충격') {
-        setMeasureType('impact');
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'AI 소음 분류에 실패했습니다.';
-      setClassifyError(msg);
-    } finally {
-      setClassifying(false);
-    }
+  if (file.size > maxSize) {
+    setClassifyError('파일 용량이 너무 큽니다. 20MB 이하 파일만 업로드해 주세요.');
+    return;
   }
+
+  setClassifying(true);
+  setClassifyError('');
+  setClassifyResult(null);
+
+  try {
+    const raw = await apiClassifyNoise(file);
+
+    const result: NoiseClassifyResponse =
+      typeof raw.result === 'object' && raw.result !== null
+        ? raw.result
+        : raw;
+
+    setClassifyResult(result);
+
+    const detectedNoiseType = result.noise_type || result.category;
+
+    if (detectedNoiseType === '공기전달') {
+      setMeasureType('airborne');
+    }
+
+    if (detectedNoiseType === '직접충격') {
+      setMeasureType('impact');
+    }
+  } catch (err: unknown) {
+    const msg =
+      err instanceof Error ? err.message : 'AI 소음 분류에 실패했습니다.';
+    setClassifyError(msg);
+  } finally {
+    setClassifying(false);
+  }
+}
 
   async function startMeasure() {
     setMicError('');
     setSaved(false);
     setSaveError('');
-    setClassifyError('');
-    setClassifyResult(null);
-    setAudioFile(null);
     setElapsed(0);
     setDbVal(0);
     setLeq(0);
     setLmax(0);
     allSamplesRef.current = [];
-    recordedChunksRef.current = [];
 
     try {
       const analyzer = new MicrophoneAnalyzer();
@@ -291,49 +244,7 @@ export function MeasurePage() {
         setDbVal(val);
         setLeq(newLeq);
         setLmax(newLmax);
-      }, calibration);
-
-      const stream = analyzer.getStream();
-
-      if (!stream) {
-        throw new Error('녹음 스트림을 가져오지 못했습니다.');
-      }
-
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : MediaRecorder.isTypeSupported('audio/webm')
-          ? 'audio/webm'
-          : '';
-
-      const recorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
-
-      mediaRecorderRef.current = recorder;
-
-      recorder.ondataavailable = event => {
-        if (event.data.size > 0) {
-          recordedChunksRef.current.push(event.data);
-        }
-      };
-
-      recorder.onstop = () => {
-        const blobType = recorder.mimeType || 'audio/webm';
-        const blob = new Blob(recordedChunksRef.current, { type: blobType });
-        const file = new File([blob], `noise-record-${Date.now()}.webm`, {
-          type: blobType,
-        });
-
-        setAudioFile(file);
-
-        if (file.size > 0) {
-          void classifyRecordedAudio(file);
-        } else {
-          setClassifyError('녹음된 오디오가 비어 있어 AI 분류를 진행하지 못했습니다.');
-        }
-      };
-
-      recorder.start();
+      }, 0);
 
       setState('measuring');
 
@@ -354,14 +265,7 @@ export function MeasurePage() {
   }
 
   function stopMeasure() {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-
-    if (mediaRecorderRef.current?.state === 'recording') {
-      mediaRecorderRef.current.stop();
-    }
+    if (timerRef.current) clearInterval(timerRef.current);
 
     if (micAnalyzerRef.current) {
       micAnalyzerRef.current.stop();
@@ -373,61 +277,30 @@ export function MeasurePage() {
 
   function getPrimarySource() {
     if (!classifyResult) return undefined;
-
-    const source =
-      classifyResult.primary_source ||
-      classifyResult.label ||
-      classifyResult.predicted_class ||
-      classifyResult.category ||
-      classifyResult.description ||
-      (typeof classifyResult.result === 'string' ? classifyResult.result : undefined)
-
-    return isValidSource(source) ? source : undefined;
+    return classifyResult.primary_source;
   }
 
   function getSecondarySource() {
     if (!classifyResult) return undefined;
-
-    return (
-      classifyResult.secondary_source ||
-      classifyResult.description ||
-      classifyResult.sub_label ||
-      (typeof classifyResult.result === 'string' ? classifyResult.result : undefined)
-    );
-  }
-
-  function getDetectedNoiseType(): NoiseType {
-    const detected = normalizeNoiseType(
-      classifyResult?.noise_type ||
-        classifyResult?.category ||
-        classifyResult?.label ||
-        classifyResult?.predicted_class
-    );
-
-    if (detected) return detected;
-
-    return measureType === 'impact' ? '직접충격' : '공기전달';
+    return classifyResult.secondary_source;
   }
 
   async function saveMeasure() {
     if (saving || saved) return;
 
-    if (classifying) {
-      setSaveError('AI 소음 분석이 끝난 뒤 저장해 주세요.');
-      return;
-    }
-
     setSaving(true);
     setSaveError('');
 
     try {
-      const noise_type = getDetectedNoiseType();
+      const noise_type: NoiseType =
+        measureType === 'impact' ? '직접충격' : '공기전달';
 
       await apiSaveMeasure({
         leq,
         lmax,
         noise_type,
-        secondary_source: getSecondarySource() || '없음',
+        primary_source: getPrimarySource(),
+        secondary_source: getSecondarySource(),
       });
 
       setSaved(true);
@@ -447,20 +320,11 @@ export function MeasurePage() {
     setElapsed(0);
     setSaved(false);
     setSaveError('');
-    setClassifyError('');
-    setClassifyResult(null);
-    setAudioFile(null);
-    recordedChunksRef.current = [];
-    mediaRecorderRef.current = null;
   }
 
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-
-      if (mediaRecorderRef.current?.state === 'recording') {
-        mediaRecorderRef.current.stop();
-      }
 
       if (micAnalyzerRef.current) {
         micAnalyzerRef.current.stop();
@@ -478,26 +342,15 @@ export function MeasurePage() {
     elapsed % 60
   ).padStart(2, '0')}`;
 
-  const standard =
-  classifyResult?.legal_standard &&
-  typeof classifyResult.legal_standard === 'object' &&
-  !Array.isArray(classifyResult.legal_standard)
-    ? (classifyResult.legal_standard as { leq?: number; lmax?: number })
-    : classifyResult?.standards &&
-        typeof classifyResult.standards === 'object' &&
-        !Array.isArray(classifyResult.standards)
-      ? (classifyResult.standards as { leq?: number; lmax?: number })
-      : undefined;
-
-  const primarySource = getPrimarySource();
-  const secondarySource = getSecondarySource();
-  const detectedNoiseType = getDetectedNoiseType();
+  const standard = classifyResult?.legal_standard ?? classifyResult?.standards;
 
   const aiChips = classifyResult
     ? [
-        primarySource && `주소음원: ${primarySource}`,
-        secondarySource && `부소음원: ${secondarySource}`,
-        detectedNoiseType,
+        getPrimarySource() || '주소음원 미분류',
+        getSecondarySource() || '부소음원 없음',
+        classifyResult.noise_type ||
+          classifyResult.category ||
+          (measureType === 'impact' ? '직접충격' : '공기전달'),
         `${limits.label} 기준`,
         `Leq 기준 ${standard?.leq ?? limits.leqLimit}dB`,
         standard?.lmax
@@ -505,7 +358,7 @@ export function MeasurePage() {
           : limits.lmaxLimit
             ? `Lmax 기준 ${limits.lmaxLimit}dB`
             : 'Lmax 미적용',
-      ].filter((chip): chip is string => Boolean(chip))
+      ]
     : [
         '분류 전',
         measureType === 'impact' ? '직접충격' : '공기전달',
@@ -672,7 +525,7 @@ export function MeasurePage() {
             AI 소음 분류
           </div>
 
-          <div
+          <label
             style={{
               width: '100%',
               boxSizing: 'border-box',
@@ -684,24 +537,29 @@ export function MeasurePage() {
               alignItems: 'center',
               justifyContent: 'center',
               gap: 8,
+              cursor: classifying ? 'wait' : 'pointer',
               color: '#0A1866',
               fontSize: 12,
               fontWeight: 700,
             }}
           >
-            <Mic size={14} color="#0A1866" />
-            {classifying
-              ? 'AI 소음 분석 중...'
-              : state === 'measuring'
-                ? '측정 종료 후 녹음본을 자동 분석합니다'
-                : classifyResult
-                  ? 'AI 소음 분석 완료'
-                  : '측정 후 AI가 녹음본을 자동 분석합니다'}
-          </div>
+            <Upload size={14} color="#0A1866" />
+            {classifying ? 'AI 분류 중...' : '오디오 파일 업로드'}
+            <input
+              type="file"
+              accept="audio/*"
+              disabled={classifying}
+              onChange={e => {
+                const file = e.target.files?.[0];
+                if (file) handleClassifyFile(file);
+              }}
+              style={{ display: 'none' }}
+            />
+          </label>
 
           {audioFile && (
             <div style={{ fontSize: 10, color: '#9AA6C0', marginTop: 8 }}>
-              녹음 파일: {audioFile.name}
+              선택 파일: {audioFile.name}
             </div>
           )}
 
@@ -933,7 +791,7 @@ export function MeasurePage() {
 
               <button
                 onClick={saveMeasure}
-                disabled={saving || saved || classifying}
+                disabled={saving || saved}
                 style={{
                   flex: 1.4,
                   border: 'none',
@@ -943,7 +801,7 @@ export function MeasurePage() {
                     ? 'rgba(26,59,219,0.2)'
                     : 'linear-gradient(135deg, #2D52F0, #1A3BDB)',
                   color: '#fff',
-                  cursor: saving || saved || classifying ? 'default' : 'pointer',
+                  cursor: saving || saved ? 'default' : 'pointer',
                   fontFamily: strongFont,
                   fontSize: 13,
                   fontWeight: 800,
@@ -951,11 +809,11 @@ export function MeasurePage() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 8,
-                  opacity: saving || classifying ? 0.7 : 1,
+                  opacity: saving ? 0.7 : 1,
                 }}
               >
                 {saved ? <CheckCircle size={14} color="#fff" /> : <Save size={14} color="#fff" />}
-                {classifying ? 'AI 분석 중...' : saving ? '저장 중...' : saved ? '저장됨 ✓' : '이력 저장'}
+                {saving ? '저장 중...' : saved ? '저장됨 ✓' : '이력 저장'}
               </button>
             </>
           )}
@@ -982,7 +840,7 @@ export function MeasurePage() {
 
               <button
                 onClick={saveMeasure}
-                disabled={saving || saved || classifying}
+                disabled={saving || saved}
                 style={{
                   flex: 1.4,
                   border: 'none',
@@ -992,7 +850,7 @@ export function MeasurePage() {
                     ? 'rgba(26,59,219,0.2)'
                     : 'linear-gradient(135deg, #2D52F0, #1A3BDB)',
                   color: '#fff',
-                  cursor: saving || saved || classifying ? 'default' : 'pointer',
+                  cursor: saving || saved ? 'default' : 'pointer',
                   fontFamily: strongFont,
                   fontSize: 13,
                   fontWeight: 800,
@@ -1000,7 +858,7 @@ export function MeasurePage() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 8,
-                  opacity: saving || classifying ? 0.7 : 1,
+                  opacity: saving ? 0.7 : 1,
                 }}
               >
                 {saved ? <CheckCircle size={14} color="#fff" /> : <Save size={14} color="#fff" />}
@@ -1172,91 +1030,7 @@ export function MeasurePage() {
               </div>
             </GlassCard>
 
-            <GlassCard style={{ marginTop: 12, padding: '16px 20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                <Mic size={14} color="#7A8AB8" />
-                <span style={{ fontSize: 12, fontWeight: 800, color: '#7A8AB8' }}>
-                  마이크 보정
-                </span>
-              </div>
-
-              <div style={{ fontSize: 11, color: '#9AA6C0', marginBottom: 12, lineHeight: 1.5 }}>
-                전문 소음측정기와 비교하여 보정값을 조정하세요. 스마트폰 마이크는 ±5dB
-                오차가 있을 수 있습니다.
-              </div>
-
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                <button
-                  onClick={() => setCalibration(c => Math.max(-20, c - 1))}
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 10,
-                    border: '1px solid rgba(26,59,219,0.2)',
-                    background: 'rgba(255,255,255,0.8)',
-                    cursor: 'pointer',
-                    fontFamily: strongFont,
-                    fontSize: 16,
-                    fontWeight: 700,
-                    color: '#1A3BDB',
-                  }}
-                >
-                  −
-                </button>
-
-                <div style={{ flex: 1, textAlign: 'center' }}>
-                  <div
-                    style={{
-                      fontFamily: strongFont,
-                      fontSize: 18,
-                      fontWeight: 700,
-                      color: '#0A1866',
-                    }}
-                  >
-                    {calibration > 0 ? '+' : ''}
-                    {calibration} dB
-                  </div>
-                  <div style={{ fontSize: 9, color: '#9AA6C0', marginTop: 2 }}>보정값</div>
-                </div>
-
-                <button
-                  onClick={() => setCalibration(c => Math.min(20, c + 1))}
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 10,
-                    border: '1px solid rgba(26,59,219,0.2)',
-                    background: 'rgba(255,255,255,0.8)',
-                    cursor: 'pointer',
-                    fontFamily: strongFont,
-                    fontSize: 16,
-                    fontWeight: 700,
-                    color: '#1A3BDB',
-                  }}
-                >
-                  +
-                </button>
-              </div>
-
-              {calibration !== 0 && (
-                <button
-                  onClick={() => setCalibration(0)}
-                  style={{
-                    marginTop: 10,
-                    width: '100%',
-                    padding: '6px',
-                    borderRadius: 8,
-                    border: '1px solid rgba(26,59,219,0.15)',
-                    background: 'rgba(255,255,255,0.6)',
-                    fontSize: 10,
-                    color: '#7A8AB8',
-                    cursor: 'pointer',
-                  }}
-                >
-                  초기화
-                </button>
-              )}
-            </GlassCard>
+            
           </>
         )}
       </div>
