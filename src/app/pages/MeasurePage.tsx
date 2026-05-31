@@ -425,7 +425,10 @@ export function MeasurePage() {
       await apiSaveMeasure({
         leq,
         lmax,
+
         noise_type,
+
+        primary_source: noise_type,
         secondary_source: getSecondarySource() || '없음',
       });
 

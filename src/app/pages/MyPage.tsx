@@ -6,10 +6,8 @@ import { TabBar } from '../components/TabBar';
 import {
   User,
   Building,
-  Settings,
   LogOut,
   ChevronRight,
-  Mic,
   Bell,
   Shield,
   HelpCircle,
@@ -41,7 +39,7 @@ function GlassCard({
   );
 }
 
-type Modal = 'profile' | 'apartment' | 'mic' | null;
+type Modal = 'profile' | 'apartment' | null;
 
 function MenuItem({
   icon,
@@ -340,23 +338,6 @@ export function MyPage() {
 
         <GlassCard style={{ padding: '4px 20px', marginBottom: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: '#9AA6C0', padding: '12px 0 4px' }}>
-            측정 설정
-          </div>
-
-          <div style={{ borderBottom: '1px solid rgba(26,59,219,0.06)' }}>
-            <MenuItem
-              icon={<Mic size={17} color="#1A3BDB" />}
-              label="마이크 보정"
-              sub={user.micOffset !== 0 ? `현재 보정값: ${user.micOffset > 0 ? '+' : ''}${user.micOffset} dB` : '마이크 감도 캘리브레이션'}
-              onClick={() => setModal('mic')}
-            />
-          </div>
-
-          <MenuItem icon={<Settings size={17} color="#1A3BDB" />} label="측정 기본값 설정" sub="소음 유형, 측정 시간 기본값" onClick={() => {}} />
-        </GlassCard>
-
-        <GlassCard style={{ padding: '4px 20px', marginBottom: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#9AA6C0', padding: '12px 0 4px' }}>
             정보
           </div>
 
@@ -441,60 +422,6 @@ export function MyPage() {
             <button onClick={saveApartment} style={{ width: '100%', padding: 14, borderRadius: 999, background: 'linear-gradient(135deg, #2D52F0, #1A3BDB)', color: '#fff', border: 'none', cursor: 'pointer', fontFamily: "'Space Grotesk', sans-serif", fontSize: 14, fontWeight: 600, marginTop: 8 }}>
               저장하기
             </button>
-          </div>
-        </BottomModal>
-      )}
-
-      {modal === 'mic' && (
-        <BottomModal title="마이크 보정" onClose={() => setModal(null)}>
-          <div style={{ textAlign: 'center' }}>
-            <div
-              style={{
-                width: 80,
-                height: 80,
-                borderRadius: '50%',
-                background: calibrating ? 'rgba(26,59,219,0.1)' : 'rgba(255,255,255,0.7)',
-                border: `2px solid ${calibrating ? '#1A3BDB' : 'rgba(255,255,255,0.88)'}`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto 16px',
-                animation: calibrating ? 'noise-pulse 1s infinite' : 'none',
-              }}
-            >
-              <Volume2 size={32} color={calibrating ? '#1A3BDB' : '#7A8AB8'} />
-            </div>
-
-            <div style={{ fontSize: 13, color: '#7A8AB8', lineHeight: 1.6, marginBottom: 20, whiteSpace: 'pre-line' }}>
-              {calibDone
-                ? `보정 완료!\n보정값: ${user.micOffset > 0 ? '+' : ''}${user.micOffset} dB\n다음 측정부터 자동 적용됩니다.`
-                : calibrating
-                  ? '화이트 노이즈를 분석 중입니다...\n조용한 환경에서 진행해주세요.'
-                  : '마이크 감도를 기기에 맞게 보정합니다.\n조용한 공간에서 시작하세요.'}
-            </div>
-
-            {!calibrating && (
-              <button onClick={startCalibration} style={{ width: '100%', padding: 14, borderRadius: 999, background: 'linear-gradient(135deg, #2D52F0, #1A3BDB)', color: '#fff', border: 'none', cursor: 'pointer', fontFamily: "'Space Grotesk', sans-serif", fontSize: 14, fontWeight: 600 }}>
-                {calibDone ? '다시 보정하기' : '보정 시작'}
-              </button>
-            )}
-
-            {calibrating && (
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-                {[0, 1, 2, 3, 4].map((i) => (
-                  <div
-                    key={i}
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: '50%',
-                      background: '#1A3BDB',
-                      animation: `bounce 1s ${i * 0.15}s infinite`,
-                    }}
-                  />
-                ))}
-              </div>
-            )}
           </div>
         </BottomModal>
       )}
