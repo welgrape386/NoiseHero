@@ -222,6 +222,21 @@ export function MeasurePage() {
     allSamplesRef.current = [];
 
     try {
+      const recordStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      recordedChunksRef.current = [];
+
+      const recorder = new MediaRecorder(recordStream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = event => {
+        if (event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.start();
+
       const analyzer = new MicrophoneAnalyzer();
       micAnalyzerRef.current = analyzer;
 
@@ -264,12 +279,38 @@ export function MeasurePage() {
     }
   }
 
-  function stopMeasure() {
+  async function stopMeasure() {
     if (timerRef.current) clearInterval(timerRef.current);
 
     if (micAnalyzerRef.current) {
       micAnalyzerRef.current.stop();
       micAnalyzerRef.current = null;
+    }
+
+    const recorder = mediaRecorderRef.current;
+
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.onstop = async () => {
+        try {
+          const audioBlob = new Blob(recordedChunksRef.current, {
+            type: 'audio/webm',
+          });
+
+          const audioFile = new File(
+            [audioBlob],
+            `noise_${Date.now()}.webm`,
+            { type: 'audio/webm' }
+          );
+
+          setAudioFile(audioFile);
+
+          await handleClassifyFile(audioFile);
+        } catch (error) {
+          console.error('자동 AI 분류 실패', error);
+        }
+      };
+
+      recorder.stop();
     }
 
     setState('done');
