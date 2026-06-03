@@ -148,7 +148,7 @@ export function ChatbotPage() {
 
           <div>
             <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 16, fontWeight: 700, color: '#0A1866' }}>
-              소음ON AI 상담
+              층간 히어로 AI 상담
             </div>
             <div style={{ fontSize: 11, color: '#7A8AB8' }}>
               층간소음 전문 AI · 법령 기반 상담
