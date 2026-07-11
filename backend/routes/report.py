@@ -6,6 +6,8 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfbase import pdfmetrics
 from pydantic import BaseModel
 from typing import List, Optional
+from bson import ObjectId
+from bson.errors import InvalidId
 import os
 from database import noise_collection, report_collection
 
@@ -28,6 +30,7 @@ class Target(BaseModel):
 
 
 class NoiseRecord(BaseModel):
+    record_id: Optional[str] = None  # 실제 저장된 측정 기록의 _id. 있으면 DB 원본값(보정 반영)으로 덮어씀
     measured_at: Optional[str] = ""
     time_zone: Optional[str] = ""
     noise_type: Optional[str] = ""
@@ -98,12 +101,103 @@ def wrap_text(pdf, font_name, size, x, y, text, max_width, line_height, canvas_o
     return y
 
 
+async def resolve_noise_records(records: List[NoiseRecord], email: str):
+    """record_id가 있는 항목은 클라이언트가 보낸 값을 무시하고 DB 원본(보정값 반영)으로 덮어쓴다."""
+    object_ids = []
+    for r in records:
+        if r.record_id:
+            try:
+                object_ids.append(ObjectId(r.record_id))
+            except InvalidId:
+                pass
+
+    db_docs_by_id = {}
+    if object_ids:
+        cursor = noise_collection.find({"_id": {"$in": object_ids}, "email": email})
+        async for doc in cursor:
+            db_docs_by_id[str(doc["_id"])] = doc
+
+    resolved = []
+    for r in records:
+        doc = db_docs_by_id.get(r.record_id) if r.record_id else None
+        if doc is None:
+            resolved.append(r)
+            continue
+
+        leq_standard = doc.get("leq_standard") or 0
+        lmax_standard = doc.get("lmax_standard") or 0
+        eval_leq = doc.get("calibrated_leq")
+        if eval_leq is None:
+            eval_leq = doc.get("leq", 0)
+        eval_lmax = doc.get("calibrated_lmax")
+        if eval_lmax is None:
+            eval_lmax = doc.get("lmax", 0)
+
+        measured_at = doc.get("measured_at")
+        measured_at_str = measured_at.isoformat() if hasattr(measured_at, "isoformat") else (measured_at or r.measured_at)
+
+        resolved.append(NoiseRecord(
+            record_id=r.record_id,
+            measured_at=measured_at_str,
+            time_zone=doc.get("time_zone", r.time_zone),
+            noise_type=doc.get("noise_type", r.noise_type),
+            primary_source=doc.get("primary_source", r.primary_source),
+            secondary_source=doc.get("secondary_source", r.secondary_source),
+            leq=eval_leq,
+            lmax=eval_lmax,
+            leq_standard=leq_standard,
+            lmax_standard=lmax_standard,
+            leq_exceeded=round(max(0, eval_leq - leq_standard), 1),
+            lmax_exceeded=round(max(0, eval_lmax - lmax_standard), 1) if lmax_standard else 0,
+        ))
+
+    return resolved, bool(db_docs_by_id)
+
+
+def recompute_statistics(records: List[NoiseRecord]):
+    """DB에서 조회한 보정 반영 기록을 기준으로 통계를 서버에서 다시 계산한다."""
+    total_count = len(records)
+    if total_count == 0:
+        return Statistics()
+
+    leqs = [r.leq for r in records]
+    lmaxs = [r.lmax for r in records]
+    exceeded_count = sum(
+        1 for r in records if (r.leq_exceeded or 0) > 0 or (r.lmax_exceeded or 0) > 0
+    )
+    daytime_count = sum(1 for r in records if r.time_zone == "주간")
+    nighttime_count = sum(1 for r in records if r.time_zone == "야간")
+
+    max_leq_idx = max(range(total_count), key=lambda i: leqs[i])
+    max_lmax_idx = max(range(total_count), key=lambda i: lmaxs[i])
+
+    return Statistics(
+        total_count=total_count,
+        exceeded_count=exceeded_count,
+        exceed_rate=round(exceeded_count / total_count * 100, 1),
+        avg_leq=round(sum(leqs) / total_count, 1),
+        avg_lmax=round(sum(lmaxs) / total_count, 1),
+        max_leq=leqs[max_leq_idx],
+        max_leq_at=records[max_leq_idx].measured_at,
+        max_lmax=lmaxs[max_lmax_idx],
+        max_lmax_at=records[max_lmax_idx].measured_at,
+        daytime_count=daytime_count,
+        nighttime_count=nighttime_count,
+    )
+
+
 @router.post("/pdf")
 async def create_noise_report_pdf(
     request: ReportRequest,
     current_user: dict = Depends(get_current_user)
 ):
     email = current_user.get("email")
+
+    request.noise_records, has_db_records = await resolve_noise_records(
+        request.noise_records or [], email
+    )
+    if has_db_records:
+        request.statistics = recompute_statistics(request.noise_records)
 
     if not os.path.exists("reports"):
         os.makedirs("reports")
