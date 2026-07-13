@@ -1,9 +1,9 @@
-<<<<<<< HEAD
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from io import BytesIO
+from collections import Counter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
@@ -16,7 +16,9 @@ import os
 router = APIRouter(prefix="/report", tags=["Report"])
 
 
+# ============================================================
 # 한글 폰트 등록
+# ============================================================
 def register_korean_font():
     font_path = "C:/Windows/Fonts/malgun.ttf"
 
@@ -30,6 +32,9 @@ def register_korean_font():
 FONT_NAME = register_korean_font()
 
 
+# ============================================================
+# 요청 JSON 모델
+# ============================================================
 class Applicant(BaseModel):
     nickname: str
     apartment_name: str
@@ -41,7 +46,7 @@ class Applicant(BaseModel):
 
 class Target(BaseModel):
     location: str
-    address: str
+    address: Optional[str] = None
 
 
 class Building(BaseModel):
@@ -60,37 +65,170 @@ class NoiseRecord(BaseModel):
     secondary_source: Optional[str] = None
     leq: float
     lmax: float
-    leq_standard: float
-    lmax_standard: float
-    leq_exceeded: float
-    lmax_exceeded: float
+    leq_standard: Optional[float] = None
+    lmax_standard: Optional[float] = None
+    leq_exceeded: Optional[float] = None
+    lmax_exceeded: Optional[float] = None
+    duration: Optional[str] = None
+    audio_file: Optional[str] = None
 
 
 class Conclusion(BaseModel):
-    site_inspection: str
-    noise_measurement: str
-    prevention: str
+    site_inspection: Optional[str] = None
+    noise_measurement: Optional[str] = None
+    prevention: Optional[str] = None
 
 
 class ReportRequest(BaseModel):
-    title: str
+    # neighbor_center: 이웃사이센터용
+    # dispute_committee: 분쟁조정위원회용
+    report_type: str = "neighbor_center"
+
+    # 기존 프론트/AI 요청과의 호환을 위해 남겨둠
+    title: Optional[str] = None
+
     created_at: str
     applicant: Applicant
     target: Target
     building: Building
     noise_records: List[NoiseRecord]
-    damage_summary: str
-    conclusion: Conclusion
-    disclaimer: str
+    damage_summary: Optional[str] = None
+    conclusion: Optional[Conclusion] = None
+    disclaimer: Optional[str] = "※ 본 문서는 AI가 작성한 초안이며 최종 제출 책임은 신청인에게 있습니다."
 
 
+# ============================================================
+# 공통 유틸 함수
+# ============================================================
 def make_paragraph(text, style):
-    return Paragraph(str(text).replace("\n", "<br/>"), style)
+    safe_text = "-" if text is None else str(text)
+    return Paragraph(safe_text.replace("\n", "<br/>"), style)
 
 
+def format_db(value):
+    if value is None:
+        return "-"
+    try:
+        return f"{float(value):.1f}"
+    except (TypeError, ValueError):
+        return "-"
+
+
+def split_datetime(measured_at: str):
+    if not measured_at:
+        return "-", "-"
+
+    text = str(measured_at)
+
+    if "T" in text:
+        date_part, time_part = text.split("T", 1)
+    elif " " in text:
+        date_part, time_part = text.split(" ", 1)
+    else:
+        return text, "-"
+
+    return date_part, time_part[:5]
+
+
+def get_report_config(report_type: str):
+    """
+    기관별 PDF 설정
+    """
+    if report_type == "neighbor_center":
+        return {
+            "title": "층간소음 피해 현장진단 신청서",
+            "receiver": "층간소음 이웃사이센터",
+            "filename": "neighbor_center_report.pdf",
+            "request_lines": [
+                "반복적으로 발생하는 층간소음으로 인한 생활 불편이 지속되고 있어, 층간소음 이웃사이센터의 상담 및 현장진단 절차 안내를 요청합니다.",
+                "필요 시 소음 측정 및 당사자 간 갈등 완화를 위한 중재 지원을 요청합니다.",
+                "저장된 소음 기록과 피해 내용을 바탕으로 현장 진단 또는 상담 절차 진행을 검토해주시기 바랍니다.",
+            ],
+        }
+
+    if report_type == "dispute_committee":
+        return {
+            "title": "층간소음 분쟁조정 신청서",
+            "receiver": "공동주택관리 분쟁조정위원회",
+            "filename": "dispute_committee_report.pdf",
+            "request_lines": [
+                "반복적인 층간소음으로 인해 생활상 피해가 지속되고 있어, 제출된 소음 기록과 피해 내용을 바탕으로 분쟁 조정 절차 진행을 요청합니다.",
+                "당사자 간 원만한 해결을 위한 조정 및 필요한 후속 조치를 검토해주시기 바랍니다.",
+                "소음 발생 정황, 반복 시간대, 주요 소음원 및 사용자 피해 내용을 종합적으로 고려해주시기 바랍니다.",
+            ],
+        }
+
+    raise HTTPException(
+        status_code=400,
+        detail="지원하지 않는 PDF 유형입니다. report_type은 neighbor_center 또는 dispute_committee만 가능합니다."
+    )
+
+
+def summarize_noise_records(records: List[NoiseRecord]):
+    """
+    선택된 소음 기록을 기반으로 반복성·야간 발생·주요 소음원을 자동 요약
+    """
+    if not records:
+        return "선택된 소음 기록이 없습니다."
+
+    total_count = len(records)
+    night_count = sum(1 for r in records if r.time_zone == "야간")
+
+    noise_type_counter = Counter()
+    source_counter = Counter()
+    hour_counter = Counter()
+    date_list = []
+
+    for record in records:
+        if record.noise_type:
+            noise_type_counter[record.noise_type] += 1
+
+        if record.primary_source:
+            source_counter[record.primary_source] += 1
+
+        if record.secondary_source:
+            source_counter[record.secondary_source] += 1
+
+        date_part, time_part = split_datetime(record.measured_at)
+
+        if date_part != "-":
+            date_list.append(date_part)
+
+        if time_part != "-" and ":" in time_part:
+            hour = time_part.split(":")[0]
+            hour_counter[f"{hour}시대"] += 1
+
+    main_noise_type = noise_type_counter.most_common(1)[0][0] if noise_type_counter else "-"
+    main_sources = ", ".join([item[0] for item in source_counter.most_common(3)]) if source_counter else "-"
+    repeated_time = hour_counter.most_common(1)[0][0] if hour_counter else "-"
+
+    if date_list:
+        start_date = min(date_list)
+        end_date = max(date_list)
+        if start_date == end_date:
+            period_text = start_date
+        else:
+            period_text = f"{start_date}부터 {end_date}까지"
+    else:
+        period_text = "-"
+
+    return (
+        f"선택된 소음 기록 기준으로 총 {total_count}회의 소음 기록이 확인되었습니다. "
+        f"이 중 {night_count}회는 야간 시간대에 발생하였으며, "
+        f"주요 소음 유형은 {main_noise_type}으로 기록되었습니다. "
+        f"반복적으로 감지된 주요 소음원은 {main_sources}입니다. "
+        f"주요 반복 발생 시간대는 {repeated_time}이며, 피해 기록 기간은 {period_text}입니다."
+    )
+
+
+# ============================================================
+# PDF 생성 API
+# ============================================================
 @router.post("/pdf")
 def create_report_pdf(data: ReportRequest):
     try:
+        config = get_report_config(data.report_type)
+
         buffer = BytesIO()
 
         doc = SimpleDocTemplate(
@@ -143,12 +281,17 @@ def create_report_pdf(data: ReportRequest):
 
         elements = []
 
-        # 제목
-        elements.append(make_paragraph(data.title, title_style))
+        # ====================================================
+        # 제목 및 제출 대상
+        # ====================================================
+        elements.append(make_paragraph(config["title"], title_style))
+        elements.append(make_paragraph(f"제출 대상: {config['receiver']}", normal_style))
         elements.append(make_paragraph(f"작성일: {data.created_at}", normal_style))
         elements.append(Spacer(1, 12))
 
-        # 신청인 정보
+        # ====================================================
+        # 1. 신청인 정보
+        # ====================================================
         elements.append(make_paragraph("1. 신청인 정보", heading_style))
 
         applicant_table = Table([
@@ -169,12 +312,16 @@ def create_report_pdf(data: ReportRequest):
 
         elements.append(applicant_table)
 
-        # 대상 세대
-        elements.append(make_paragraph("2. 대상 세대", heading_style))
+        # ====================================================
+        # 2. 소음 발생 추정 위치
+        # ====================================================
+        elements.append(make_paragraph("2. 소음 발생 추정 위치", heading_style))
+
+        target_location = data.target.location or "위치 불명"
 
         target_table = Table([
-            ["위치", data.target.location],
-            ["주소", data.target.address],
+            ["소음 발생 추정 위치", target_location],
+            ["상세 위치/주소", data.target.address or "-"],
         ], colWidths=[120, 350])
 
         target_table.setStyle(TableStyle([
@@ -186,7 +333,9 @@ def create_report_pdf(data: ReportRequest):
 
         elements.append(target_table)
 
-        # 건물 정보
+        # ====================================================
+        # 3. 건물 정보
+        # ====================================================
         elements.append(make_paragraph("3. 건물 정보", heading_style))
 
         building_table = Table([
@@ -206,25 +355,39 @@ def create_report_pdf(data: ReportRequest):
 
         elements.append(building_table)
 
-        # 소음 측정 기록
+        # ====================================================
+        # 4. 소음 측정 기록
+        # ====================================================
         elements.append(make_paragraph("4. 소음 측정 기록", heading_style))
 
         noise_table_data = [[
-            "측정일시", "시간대", "유형", "주소음원", "Leq", "Lmax", "초과값"
+            "발생일자", "발생시간", "소음 종류", "지속시간(추정)", "Leq/Lmax"
         ]]
 
         for record in data.noise_records:
+            date_part, time_part = split_datetime(record.measured_at)
+
+            noise_name = record.noise_type or "-"
+            if record.primary_source:
+                noise_name = f"{record.noise_type} / {record.primary_source}"
+
+            if record.secondary_source:
+                noise_name += f", {record.secondary_source}"
+
+            duration_text = record.duration or "약 1분"
+
             noise_table_data.append([
-                record.measured_at,
-                record.time_zone,
-                record.noise_type,
-                record.primary_source,
-                f"{record.leq} dB",
-                f"{record.lmax} dB",
-                f"Leq +{record.leq_exceeded}, Lmax +{record.lmax_exceeded}",
+                date_part,
+                time_part,
+                noise_name,
+                duration_text,
+                f"{format_db(record.leq)} / {format_db(record.lmax)} dB",
             ])
 
-        noise_table = Table(noise_table_data, colWidths=[95, 45, 60, 80, 55, 55, 110])
+        noise_table = Table(
+            noise_table_data,
+            colWidths=[80, 55, 180, 75, 80]
+        )
 
         noise_table.setStyle(TableStyle([
             ("FONTNAME", (0, 0), (-1, -1), FONT_NAME),
@@ -237,19 +400,60 @@ def create_report_pdf(data: ReportRequest):
 
         elements.append(noise_table)
 
-        # 피해 요약
-        elements.append(make_paragraph("5. 피해 요약", heading_style))
-        elements.append(make_paragraph(data.damage_summary, normal_style))
+        # ====================================================
+        # 5. 반복 소음 패턴 및 피해 요약
+        # ====================================================
+        elements.append(make_paragraph("5. 반복 소음 패턴 및 피해 요약", heading_style))
 
-        # 요청 사항
+        auto_summary = summarize_noise_records(data.noise_records)
+
+        if data.damage_summary:
+            damage_text = f"{auto_summary}<br/><br/>사용자 피해 내용: {data.damage_summary}"
+        else:
+            damage_text = auto_summary
+
+        elements.append(make_paragraph(damage_text, normal_style))
+
+        # ====================================================
+        # 6. 요청 사항
+        # ====================================================
         elements.append(make_paragraph("6. 요청 사항", heading_style))
-        elements.append(make_paragraph(f"① 현장 진단 요청: {data.conclusion.site_inspection}", normal_style))
-        elements.append(Spacer(1, 6))
-        elements.append(make_paragraph(f"② 소음 측정 요청: {data.conclusion.noise_measurement}", normal_style))
-        elements.append(Spacer(1, 6))
-        elements.append(make_paragraph(f"③ 재발 방지 요청: {data.conclusion.prevention}", normal_style))
 
+        for idx, line in enumerate(config["request_lines"], start=1):
+            elements.append(make_paragraph(f"{idx}. {line}", normal_style))
+            elements.append(Spacer(1, 6))
+
+        if data.conclusion:
+            elements.append(Spacer(1, 4))
+            elements.append(make_paragraph("추가 요청 내용", heading_style))
+
+            if data.conclusion.site_inspection:
+                elements.append(make_paragraph(f"① 현장 진단 요청: {data.conclusion.site_inspection}", normal_style))
+                elements.append(Spacer(1, 6))
+
+            if data.conclusion.noise_measurement:
+                elements.append(make_paragraph(f"② 소음 측정 요청: {data.conclusion.noise_measurement}", normal_style))
+                elements.append(Spacer(1, 6))
+
+            if data.conclusion.prevention:
+                elements.append(make_paragraph(f"③ 재발 방지 요청: {data.conclusion.prevention}", normal_style))
+                elements.append(Spacer(1, 6))
+
+        # ====================================================
+        # 7. 첨부 자료
+        # ====================================================
+        elements.append(make_paragraph("7. 첨부 자료", heading_style))
+
+        audio_count = sum(1 for record in data.noise_records if record.audio_file)
+
+        if audio_count > 0:
+            elements.append(make_paragraph(f"측정 당시 녹음본 {audio_count}건이 첨부 자료로 기록되어 있습니다.", normal_style))
+        else:
+            elements.append(make_paragraph("별도 녹음본 첨부 정보는 없습니다.", normal_style))
+
+        # ====================================================
         # 면책 문구
+        # ====================================================
         elements.append(Spacer(1, 20))
         elements.append(make_paragraph(data.disclaimer, small_style))
 
@@ -257,7 +461,7 @@ def create_report_pdf(data: ReportRequest):
 
         buffer.seek(0)
 
-        filename = "noiseguard_report.pdf"
+        filename = config["filename"]
 
         return StreamingResponse(
             buffer,
@@ -267,114 +471,8 @@ def create_report_pdf(data: ReportRequest):
             }
         )
 
+    except HTTPException:
+        raise
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-=======
-from fastapi import APIRouter, Depends
-from fastapi.responses import FileResponse
-from datetime import datetime
-from reportlab.pdfgen import canvas
-from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.pdfbase import pdfmetrics
-import os
-
-from database import noise_collection
-from routes.auth import get_current_user
-
-router = APIRouter()
-
-
-@router.get("/pdf")
-async def create_noise_report_pdf(
-    current_user: dict = Depends(get_current_user)
-):
-    email = current_user.get("email")
-
-    records = []
-    cursor = noise_collection.find({"email": email}).sort("measured_at", -1)
-
-    async for record in cursor:
-        records.append(record)
-
-    if not os.path.exists("reports"):
-        os.makedirs("reports")
-
-    filename = f"reports/noise_report_{email.replace('@', '_')}.pdf"
-
-    pdf = canvas.Canvas(filename)
-    pdf.setTitle("NoiseGuard 소음 민원서")
-
-    # 한글 폰트
-    font_path = os.path.join(os.path.dirname(__file__), "..", "fonts", "NANUMGOTHIC.TTF")
-    pdfmetrics.registerFont(TTFont("NanumGothic", font_path))
-    pdf.setFont("NanumGothic", 14)
-
-    y = 800
-
-    pdf.drawString(50, y, "NoiseGuard 소음 민원서 초안")
-    y -= 40
-
-    pdf.setFont("NanumGothic", 10)
-    pdf.drawString(50, y, f"작성자 이메일: {email}")
-    y -= 25
-    pdf.drawString(50, y, f"생성일시: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    y -= 40
-
-    pdf.setFont("NanumGothic", 12)
-    pdf.drawString(50, y, "1. 소음 기록 요약")
-    y -= 30
-
-    pdf.setFont("NanumGothic", 10)
-
-    if not records:
-        pdf.drawString(50, y, "저장된 소음 기록이 없습니다.")
-        y -= 25
-    else:
-        for idx, record in enumerate(records[:10], start=1):
-            measured_at = record.get("measured_at", "")
-            if hasattr(measured_at, "strftime"):
-                measured_at = measured_at.strftime("%Y-%m-%d %H:%M:%S")
-
-            line = (
-                f"{idx}. {measured_at} / "
-                f"{record.get('noise_type')} / "
-                f"Leq {record.get('leq')}dB / "
-                f"Lmax {record.get('lmax')}dB / "
-                f"기준초과: {record.get('is_exceeded')}"
-            )
-
-            pdf.drawString(50, y, line)
-            y -= 22
-
-            if y < 80:
-                pdf.showPage()
-                pdf.setFont("NanumGothic", 10)
-                y = 800
-
-    y -= 25
-
-    pdf.setFont("NanumGothic", 12)
-    pdf.drawString(50, y, "2. 민원 내용 초안")
-    y -= 30
-
-    pdf.setFont("NanumGothic", 10)
-
-    complaint_lines = [
-        "위 소음 기록은 사용자가 NoiseGuard 서비스를 통해 측정한 자료입니다.",
-        "반복적으로 발생한 소음으로 인해 생활에 불편을 겪고 있으며,",
-        "관련 기준 초과 여부 확인 및 적절한 조치를 요청드립니다.",
-        "본 문서는 참고용 초안이며, 실제 민원 제출 전 내용 확인이 필요합니다."
-    ]
-
-    for line in complaint_lines:
-        pdf.drawString(50, y, line)
-        y -= 22
-
-    pdf.save()
-
-    return FileResponse(
-        path=filename,
-        filename="noise_report.pdf",
-        media_type="application/pdf"
-    )
->>>>>>> origin/backend
