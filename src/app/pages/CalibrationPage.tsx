@@ -13,29 +13,25 @@ const MEASURE_SECONDS = 15;
 type Step = 'guide' | 'measuring' | 'complete' | 'error';
 
 // Simple mic analyzer reused from MeasurePage pattern
+// 실제 마이크 입력만 사용 (데모/시뮬레이션 없음)
 class CalibrationAnalyzer {
   private ctx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
   private stream: MediaStream | null = null;
   private rafId: number | null = null;
-  isDemoMode = false;
-  private demoBase = 38;
   onDb: (db: number) => void = () => {};
 
   async start() {
-    try {
-      this.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      this.ctx = new AudioContext();
-      this.analyser = this.ctx.createAnalyser();
-      this.analyser.fftSize = 2048;
-      this.source = this.ctx.createMediaStreamSource(this.stream);
-      this.source.connect(this.analyser);
-      this.loop();
-    } catch {
-      this.isDemoMode = true;
-      this.runDemo();
-    }
+    this.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    // 여기서 실패하면 catch 없이 그대로 에러를 던져서 상위(startMeasuring)에서 처리하게 함
+
+    this.ctx = new AudioContext();
+    this.analyser = this.ctx.createAnalyser();
+    this.analyser.fftSize = 2048;
+    this.source = this.ctx.createMediaStreamSource(this.stream);
+    this.source.connect(this.analyser);
+    this.loop();
   }
 
   private loop() {
@@ -46,19 +42,9 @@ class CalibrationAnalyzer {
       let sum = 0;
       for (const v of buf) sum += v * v;
       const rms = Math.sqrt(sum / buf.length);
+      // MeasurePage의 MicrophoneAnalyzer와 동일한 공식(94 오프셋, 0~120 범위)으로 통일
       const db = rms > 0 ? Math.max(0, Math.min(120, 20 * Math.log10(rms) + 94)) : 0;
       this.onDb(db);
-      this.rafId = requestAnimationFrame(tick);
-    };
-    this.rafId = requestAnimationFrame(tick);
-  }
-
-  private runDemo() {
-    const tick = () => {
-      this.demoBase += (Math.random() - 0.5) * 1.5;
-      this.demoBase = Math.max(32, Math.min(48, this.demoBase));
-      const db = this.demoBase + Math.sin(Date.now() / 800) * 2 + (Math.random() - 0.5) * 3;
-      this.onDb(Math.round(db * 10) / 10);
       this.rafId = requestAnimationFrame(tick);
     };
     this.rafId = requestAnimationFrame(tick);
@@ -97,7 +83,7 @@ export function CalibrationPage() {
   const [currentDb, setCurrentDb] = useState(0);
   const [samples, setSamples] = useState<number[]>([]);
   const [baseline, setBaseline] = useState<number | null>(null);
-  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [micErrorMsg, setMicErrorMsg] = useState('');
   const [saving, setSaving] = useState(false);
   const analyzerRef = useRef<CalibrationAnalyzer | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -105,32 +91,45 @@ export function CalibrationPage() {
   const progress = Math.min(elapsed / MEASURE_SECONDS, 1);
 
   const startMeasuring = async () => {
-    setStep('measuring');
-    setElapsed(0);
-    setSamples([]);
+  setStep('measuring');
+  setElapsed(0);
+  setSamples([]);
+  setMicErrorMsg('');
 
-    const analyzer = new CalibrationAnalyzer();
-    analyzerRef.current = analyzer;
+  const analyzer = new CalibrationAnalyzer();
+  analyzerRef.current = analyzer;
 
-    analyzer.onDb = (db) => {
-      setCurrentDb(db);
-      setSamples(prev => [...prev, db]);
-    };
-
-    await analyzer.start();
-    setIsDemoMode(analyzer.isDemoMode);
-
-    timerRef.current = setInterval(() => {
-      setElapsed(prev => {
-        const next = prev + 1;
-        if (next >= MEASURE_SECONDS) {
-          clearInterval(timerRef.current!);
-          finishMeasuring();
-        }
-        return next;
-      });
-    }, 1000);
+  analyzer.onDb = (db) => {
+    setCurrentDb(db);
+    setSamples(prev => [...prev, db]);
   };
+
+  try {
+    await analyzer.start();
+  } catch (err) {
+    const msg =
+      err instanceof Error && err.name === 'NotAllowedError'
+        ? '마이크 권한이 거부되었습니다. 브라우저 설정에서 마이크 접근을 허용해주세요.'
+        : err instanceof Error
+          ? err.message
+          : '마이크에 접근할 수 없습니다.';
+
+    setMicErrorMsg(msg);
+    setStep('error');
+    return;
+  }
+
+  timerRef.current = setInterval(() => {
+    setElapsed(prev => {
+      const next = prev + 1;
+      if (next >= MEASURE_SECONDS) {
+        clearInterval(timerRef.current!);
+        finishMeasuring();
+      }
+      return next;
+    });
+  }, 1000);
+};
 
   const finishMeasuring = () => {
     analyzerRef.current?.stop();
@@ -251,16 +250,6 @@ export function CalibrationPage() {
         {/* ── 측정 중 ── */}
         {step === 'measuring' && (
           <>
-            {isDemoMode && (
-              <div style={{
-                background: 'rgba(26,59,219,0.08)', border: '1px solid rgba(26,59,219,0.2)',
-                borderRadius: 14, padding: '10px 14px', marginBottom: 20,
-                fontSize: 12, color: '#1A3BDB', fontFamily: font, fontWeight: 700,
-              }}>
-                마이크 권한 없음 — 데모 모드로 진행 중입니다
-              </div>
-            )}
-
             <GlassCard style={{ padding: '32px 24px', textAlign: 'center', marginBottom: 20 }}>
               {/* 원형 진행률 */}
               <div style={{ position: 'relative', width: 140, height: 140, margin: '0 auto 24px' }}>
@@ -326,11 +315,6 @@ export function CalibrationPage() {
                   {baseline.toFixed(1)} <span style={{ fontSize: 16, fontWeight: 700, color: '#7A8AB8' }}>dB</span>
                 </div>
               </div>
-              {isDemoMode && (
-                <div style={{ fontSize: 11, color: '#9AA6C0', fontFamily: font, fontWeight: 700 }}>
-                  * 데모 모드 측정값 (실제 마이크 권한 필요)
-                </div>
-              )}
             </GlassCard>
 
             <GlassCard style={{ padding: '16px 18px', marginBottom: 24 }}>
@@ -361,7 +345,7 @@ export function CalibrationPage() {
               </div>
               <div style={{ fontFamily: font, fontSize: 18, fontWeight: 800, color: '#0A1866', marginBottom: 8 }}>측정 실패</div>
               <div style={{ fontSize: 13, color: '#7A8AB8', fontFamily: font, fontWeight: 700 }}>
-                측정 데이터를 수집하지 못했습니다.<br />다시 시도해주세요.
+                {micErrorMsg || '측정 데이터를 수집하지 못했습니다.'}<br />다시 시도해주세요.
               </div>
             </GlassCard>
             <button
