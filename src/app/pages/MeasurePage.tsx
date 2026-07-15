@@ -13,6 +13,7 @@ import {
 import {
   apiSaveMeasure,
   apiClassifyNoise,
+  apiGetCalibration,
   LEGAL_STANDARDS,
   isNighttime,
   type NoiseClassifyResponse,
@@ -187,6 +188,7 @@ export function MeasurePage() {
   const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
   const [micError, setMicError] = useState('');
+  const [baselineDb, setBaselineDb] = useState(0);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
@@ -202,6 +204,13 @@ export function MeasurePage() {
 
   const duration = measureType === 'impact' ? 60 : 300;
   const limits = getLimits(measureType);
+  useEffect(() => {
+  apiGetCalibration()
+    .then(cal => {
+      if (cal.baseline_db !== null) setBaselineDb(cal.baseline_db);
+    })
+    .catch(() => {});
+}, []);
   
 
   async function classifyRecordedAudio(file: File) {
@@ -470,8 +479,10 @@ export function MeasurePage() {
     };
   }, []);
 
-  const isLeqOver = leq > limits.leqLimit;
-  const isLmaxOver = limits.lmaxLimit !== null && lmax > limits.lmaxLimit;
+  const calibratedLeq = Math.round((leq - baselineDb) * 10) / 10;
+  const calibratedLmax = Math.round((lmax - baselineDb) * 10) / 10;
+  const isLeqOver = calibratedLeq > limits.leqLimit;
+  const isLmaxOver = limits.lmaxLimit !== null && calibratedLmax > limits.lmaxLimit;
   const isOver = isLeqOver || isLmaxOver;
 
   const progress = Math.min(elapsed / duration, 1);

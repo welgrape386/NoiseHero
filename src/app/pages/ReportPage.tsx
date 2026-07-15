@@ -141,6 +141,7 @@ export function ReportPage() {
         },
 
         noise_records: selectedRecords.map(item => ({
+          record_id: item.id,
           measured_at: item.measured_at || '',
           time_zone: item.period,
           noise_type: item.type,

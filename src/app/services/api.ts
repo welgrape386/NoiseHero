@@ -75,6 +75,9 @@ export type NoiseRecord = {
   lmax_standard?: number | null;
   is_exceeded: boolean;
   measured_at: string;
+  device_baseline_db?: number | null;
+  calibrated_leq?: number;
+  calibrated_lmax?: number; 
 };
 
 export type HistoryItem = {
@@ -90,6 +93,9 @@ export type HistoryItem = {
   lmax_standard?: number | null;
   primary_source?: string;
   secondary_source?: string;
+  device_baseline_db?: number | null;
+  calibrated_leq?: number;
+  calibrated_lmax?: number;  
 };
 
 export type ChatRole = 'user' | 'assistant' | 'system';
@@ -141,6 +147,7 @@ export type ReportTargetInfo = {
 };
 
 export type ReportNoiseRecord = {
+  record_id?: string;
   measured_at: string;
   noise_type: string;
   time_zone: string;
@@ -287,6 +294,24 @@ export async function apiGetHistory() {
   return res.history ?? [];
 }
 
+export type CalibrationResponse = {
+  baseline_db: number | null;
+  calibrated_at: string | null;
+  status: '준비 완료' | '보정 필요';
+  message?: string;
+};
+
+export async function apiGetCalibration() {
+  return request<CalibrationResponse>('/noise/calibration');
+}
+
+export async function apiPostCalibration(baseline_db: number) {
+  return request<CalibrationResponse>('/noise/calibration', {
+    method: 'POST',
+    body: JSON.stringify({ baseline_db }),
+  });
+}
+
 export async function apiClassifyNoise(file: File) {
   const token = getToken();
 
@@ -391,6 +416,9 @@ export function mapRecord(record: NoiseRecord): HistoryItem {
     lmax_standard: record.lmax_standard,
     primary_source: record.primary_source,
     secondary_source: record.secondary_source,
+    device_baseline_db: record.device_baseline_db,
+    calibrated_leq: record.calibrated_leq,
+    calibrated_lmax: record.calibrated_lmax, 
   };
 }
 

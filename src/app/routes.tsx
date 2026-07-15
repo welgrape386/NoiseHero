@@ -8,6 +8,7 @@ import { MeasurePage } from './pages/MeasurePage';
 import { ReportPage } from './pages/ReportPage';
 import { ChatbotPage } from './pages/ChatbotPage';
 import { MyPage } from './pages/MyPage';
+import { CalibrationPage } from './pages/CalibrationPage';
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const token = localStorage.getItem('noise_token');
@@ -69,6 +70,14 @@ export const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <MyPage />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/calibration',
+    element: (
+      <RequireAuth>
+        <CalibrationPage />
       </RequireAuth>
     ),
   },
