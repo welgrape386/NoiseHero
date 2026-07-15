@@ -23,8 +23,14 @@ class CalibrationAnalyzer {
   onDb: (db: number) => void = () => {};
 
   async start() {
-    this.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    // 여기서 실패하면 catch 없이 그대로 에러를 던져서 상위(startMeasuring)에서 처리하게 함
+    this.stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+      },
+      video: false,
+    });
 
     this.ctx = new AudioContext();
     this.analyser = this.ctx.createAnalyser();
