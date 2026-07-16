@@ -8,6 +8,7 @@ import { MeasurePage } from './pages/MeasurePage';
 import { ReportPage } from './pages/ReportPage';
 import { ChatbotPage } from './pages/ChatbotPage';
 import { MyPage } from './pages/MyPage';
+import { ActionStepsPage } from './pages/ActionStepsPage';
 import { CalibrationPage } from './pages/CalibrationPage';
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -62,6 +63,14 @@ export const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <ChatbotPage />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/action-steps',
+    element: (
+      <RequireAuth>
+        <ActionStepsPage />
       </RequireAuth>
     ),
   },
