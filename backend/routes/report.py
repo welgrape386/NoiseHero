@@ -45,7 +45,7 @@ class Applicant(BaseModel):
 
 
 class Target(BaseModel):
-    location: str
+    location: Optional[str] = None
     address: Optional[str] = None
 
 
@@ -90,7 +90,11 @@ class ReportRequest(BaseModel):
     created_at: str
     applicant: Applicant
     target: Target
-    building: Building
+
+    # 건물 정보는 PDF에서 출력하지 않지만,
+    # 기존 프론트/AI 요청과의 호환을 위해 optional로 유지
+    building: Optional[Building] = None
+
     noise_records: List[NoiseRecord]
     damage_summary: Optional[str] = None
     conclusion: Optional[Conclusion] = None
@@ -279,6 +283,14 @@ def create_report_pdf(data: ReportRequest):
             textColor=colors.grey,
         )
 
+        common_table_style = TableStyle([
+            ("FONTNAME", (0, 0), (-1, -1), FONT_NAME),
+            ("BACKGROUND", (0, 0), (0, -1), colors.lightgrey),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("PADDING", (0, 0), (-1, -1), 6),
+        ])
+
         elements = []
 
         # ====================================================
@@ -302,14 +314,7 @@ def create_report_pdf(data: ReportRequest):
             ["관리사무소 연락처", data.applicant.management_phone or "-"],
         ], colWidths=[120, 350])
 
-        applicant_table.setStyle(TableStyle([
-            ("FONTNAME", (0, 0), (-1, -1), FONT_NAME),
-            ("BACKGROUND", (0, 0), (0, -1), colors.lightgrey),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("PADDING", (0, 0), (-1, -1), 6),
-        ]))
-
+        applicant_table.setStyle(common_table_style)
         elements.append(applicant_table)
 
         # ====================================================
@@ -324,41 +329,13 @@ def create_report_pdf(data: ReportRequest):
             ["상세 위치/주소", data.target.address or "-"],
         ], colWidths=[120, 350])
 
-        target_table.setStyle(TableStyle([
-            ("FONTNAME", (0, 0), (-1, -1), FONT_NAME),
-            ("BACKGROUND", (0, 0), (0, -1), colors.lightgrey),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-            ("PADDING", (0, 0), (-1, -1), 6),
-        ]))
-
+        target_table.setStyle(common_table_style)
         elements.append(target_table)
 
         # ====================================================
-        # 3. 건물 정보
+        # 3. 소음 측정 기록
         # ====================================================
-        elements.append(make_paragraph("3. 건물 정보", heading_style))
-
-        building_table = Table([
-            ["건설사", data.building.building_company or "-"],
-            ["슬라브 두께", data.building.slab_thickness or "-"],
-            ["구조", data.building.structure or "-"],
-            ["층간소음위원회", data.building.committee or "-"],
-            ["관리사무소", data.building.management_office or "-"],
-        ], colWidths=[120, 350])
-
-        building_table.setStyle(TableStyle([
-            ("FONTNAME", (0, 0), (-1, -1), FONT_NAME),
-            ("BACKGROUND", (0, 0), (0, -1), colors.lightgrey),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-            ("PADDING", (0, 0), (-1, -1), 6),
-        ]))
-
-        elements.append(building_table)
-
-        # ====================================================
-        # 4. 소음 측정 기록
-        # ====================================================
-        elements.append(make_paragraph("4. 소음 측정 기록", heading_style))
+        elements.append(make_paragraph("3. 소음 측정 기록", heading_style))
 
         noise_table_data = [[
             "발생일자", "발생시간", "소음 종류", "지속시간(추정)", "Leq/Lmax"
@@ -368,6 +345,7 @@ def create_report_pdf(data: ReportRequest):
             date_part, time_part = split_datetime(record.measured_at)
 
             noise_name = record.noise_type or "-"
+
             if record.primary_source:
                 noise_name = f"{record.noise_type} / {record.primary_source}"
 
@@ -401,9 +379,9 @@ def create_report_pdf(data: ReportRequest):
         elements.append(noise_table)
 
         # ====================================================
-        # 5. 반복 소음 패턴 및 피해 요약
+        # 4. 반복 소음 패턴 및 피해 요약
         # ====================================================
-        elements.append(make_paragraph("5. 반복 소음 패턴 및 피해 요약", heading_style))
+        elements.append(make_paragraph("4. 반복 소음 패턴 및 피해 요약", heading_style))
 
         auto_summary = summarize_noise_records(data.noise_records)
 
@@ -415,9 +393,9 @@ def create_report_pdf(data: ReportRequest):
         elements.append(make_paragraph(damage_text, normal_style))
 
         # ====================================================
-        # 6. 요청 사항
+        # 5. 요청 사항
         # ====================================================
-        elements.append(make_paragraph("6. 요청 사항", heading_style))
+        elements.append(make_paragraph("5. 요청 사항", heading_style))
 
         for idx, line in enumerate(config["request_lines"], start=1):
             elements.append(make_paragraph(f"{idx}. {line}", normal_style))
@@ -440,9 +418,9 @@ def create_report_pdf(data: ReportRequest):
                 elements.append(Spacer(1, 6))
 
         # ====================================================
-        # 7. 첨부 자료
+        # 6. 첨부 자료
         # ====================================================
-        elements.append(make_paragraph("7. 첨부 자료", heading_style))
+        elements.append(make_paragraph("6. 첨부 자료", heading_style))
 
         audio_count = sum(1 for record in data.noise_records if record.audio_file)
 
