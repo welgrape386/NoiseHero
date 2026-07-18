@@ -4,12 +4,14 @@ from pydantic import BaseModel
 from typing import List, Optional
 from io import BytesIO
 from collections import Counter
+
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+
 import os
 
 
@@ -82,6 +84,7 @@ class Conclusion(BaseModel):
 class ReportRequest(BaseModel):
     # neighbor_center: 이웃사이센터용
     # dispute_committee: 분쟁조정위원회용
+    # management_office_summary: 관리사무소 제출용 요약 PDF
     report_type: str = "neighbor_center"
 
     # 기존 프론트/AI 요청과의 호환을 위해 남겨둠
@@ -91,7 +94,7 @@ class ReportRequest(BaseModel):
     applicant: Applicant
     target: Target
 
-    # 건물 정보는 PDF에서 출력하지 않지만,
+    # 건물 정보는 PDF 본문에 출력하지 않지만,
     # 기존 프론트/AI 요청과의 호환을 위해 optional로 유지
     building: Optional[Building] = None
 
@@ -134,6 +137,18 @@ def split_datetime(measured_at: str):
     return date_part, time_part[:5]
 
 
+def get_noise_name(record: NoiseRecord):
+    noise_name = record.noise_type or "-"
+
+    if record.primary_source:
+        noise_name = f"{record.noise_type} / {record.primary_source}"
+
+    if record.secondary_source:
+        noise_name += f", {record.secondary_source}"
+
+    return noise_name
+
+
 def get_report_config(report_type: str):
     """
     기관별 PDF 설정
@@ -162,9 +177,21 @@ def get_report_config(report_type: str):
             ],
         }
 
+    if report_type == "management_office_summary":
+        return {
+            "title": "층간소음 관리사무소 민원 접수 요청서",
+            "receiver": "관리사무소 / 관리주체",
+            "filename": "management_office_summary_report.pdf",
+            "request_lines": [
+                "반복적으로 발생하는 층간소음으로 인해 생활상 불편이 지속되고 있어, 관리주체의 사실관계 확인을 요청합니다.",
+                "소음 발생 추정 세대에 층간소음 발생 사실을 안내하고, 소음 중단 또는 소음차단 조치를 권고해주시기 바랍니다.",
+                "저장된 소음 기록, 반복 발생 시간대, 주요 소음원 및 사용자 피해 내용을 바탕으로 후속 조치 필요 여부를 검토해주시기 바랍니다.",
+            ],
+        }
+
     raise HTTPException(
         status_code=400,
-        detail="지원하지 않는 PDF 유형입니다. report_type은 neighbor_center 또는 dispute_committee만 가능합니다."
+        detail="지원하지 않는 PDF 유형입니다. report_type은 neighbor_center, dispute_committee, management_office_summary만 가능합니다."
     )
 
 
@@ -226,6 +253,199 @@ def summarize_noise_records(records: List[NoiseRecord]):
 
 
 # ============================================================
+# PDF 생성 함수
+# ============================================================
+def create_general_report_pdf(data: ReportRequest, config: dict):
+    buffer = BytesIO()
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=40,
+        leftMargin=40,
+        topMargin=40,
+        bottomMargin=40,
+    )
+
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        "KoreanTitle",
+        parent=styles["Title"],
+        fontName=FONT_NAME,
+        fontSize=18,
+        leading=24,
+        alignment=1,
+        spaceAfter=20,
+    )
+
+    heading_style = ParagraphStyle(
+        "KoreanHeading",
+        parent=styles["Heading2"],
+        fontName=FONT_NAME,
+        fontSize=13,
+        leading=18,
+        spaceBefore=12,
+        spaceAfter=8,
+    )
+
+    normal_style = ParagraphStyle(
+        "KoreanNormal",
+        parent=styles["Normal"],
+        fontName=FONT_NAME,
+        fontSize=10,
+        leading=15,
+    )
+
+    small_style = ParagraphStyle(
+        "KoreanSmall",
+        parent=styles["Normal"],
+        fontName=FONT_NAME,
+        fontSize=8,
+        leading=12,
+        textColor=colors.grey,
+    )
+
+    common_table_style = TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), FONT_NAME),
+        ("BACKGROUND", (0, 0), (0, -1), colors.lightgrey),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("PADDING", (0, 0), (-1, -1), 6),
+    ])
+
+    elements = []
+
+    # 제목 및 제출 대상
+    elements.append(make_paragraph(config["title"], title_style))
+    elements.append(make_paragraph(f"제출 대상: {config['receiver']}", normal_style))
+    elements.append(make_paragraph(f"작성일: {data.created_at}", normal_style))
+    elements.append(Spacer(1, 12))
+
+    # 1. 신청인 정보
+    elements.append(make_paragraph("1. 신청인 정보", heading_style))
+
+    applicant_table = Table([
+        ["닉네임", data.applicant.nickname],
+        ["아파트명", data.applicant.apartment_name],
+        ["동/호수", f"{data.applicant.dong}동 {data.applicant.ho}호"],
+        ["층수", f"{data.applicant.floor}층"],
+        ["관리사무소 연락처", data.applicant.management_phone or "-"],
+    ], colWidths=[120, 350])
+
+    applicant_table.setStyle(common_table_style)
+    elements.append(applicant_table)
+
+    # 2. 소음 발생 추정 위치
+    elements.append(make_paragraph("2. 소음 발생 추정 위치", heading_style))
+
+    target_location = data.target.location or "위치 불명"
+
+    target_table = Table([
+        ["소음 발생 추정 위치", target_location],
+        ["상세 위치/주소", data.target.address or "-"],
+    ], colWidths=[120, 350])
+
+    target_table.setStyle(common_table_style)
+    elements.append(target_table)
+
+    # 3. 소음 측정 기록
+    elements.append(make_paragraph("3. 소음 측정 기록", heading_style))
+
+    noise_table_data = [[
+        "발생일자", "발생시간", "소음 종류", "지속시간(추정)", "Leq/Lmax"
+    ]]
+
+    for record in data.noise_records:
+        date_part, time_part = split_datetime(record.measured_at)
+
+        noise_table_data.append([
+            date_part,
+            time_part,
+            get_noise_name(record),
+            record.duration or "약 1분",
+            f"{format_db(record.leq)} / {format_db(record.lmax)} dB",
+        ])
+
+    noise_table = Table(
+        noise_table_data,
+        colWidths=[80, 55, 180, 75, 80]
+    )
+
+    noise_table.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), FONT_NAME),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("FONTSIZE", (0, 0), (-1, -1), 7),
+        ("PADDING", (0, 0), (-1, -1), 4),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ]))
+
+    elements.append(noise_table)
+
+    # 4. 반복 소음 패턴 및 피해 요약
+    elements.append(make_paragraph("4. 반복 소음 패턴 및 피해 요약", heading_style))
+
+    auto_summary = summarize_noise_records(data.noise_records)
+
+    if data.damage_summary:
+        damage_text = f"{auto_summary}<br/><br/>사용자 피해 내용: {data.damage_summary}"
+    else:
+        damage_text = auto_summary
+
+    elements.append(make_paragraph(damage_text, normal_style))
+
+    # 5. 요청 사항
+    elements.append(make_paragraph("5. 요청 사항", heading_style))
+
+    for idx, line in enumerate(config["request_lines"], start=1):
+        elements.append(make_paragraph(f"{idx}. {line}", normal_style))
+        elements.append(Spacer(1, 6))
+
+    if data.conclusion:
+        elements.append(Spacer(1, 4))
+        elements.append(make_paragraph("추가 요청 내용", heading_style))
+
+        if data.conclusion.site_inspection:
+            elements.append(make_paragraph(f"① 현장 진단 요청: {data.conclusion.site_inspection}", normal_style))
+            elements.append(Spacer(1, 6))
+
+        if data.conclusion.noise_measurement:
+            elements.append(make_paragraph(f"② 소음 측정 요청: {data.conclusion.noise_measurement}", normal_style))
+            elements.append(Spacer(1, 6))
+
+        if data.conclusion.prevention:
+            elements.append(make_paragraph(f"③ 재발 방지 요청: {data.conclusion.prevention}", normal_style))
+            elements.append(Spacer(1, 6))
+
+    # 6. 첨부 자료
+    elements.append(make_paragraph("6. 첨부 자료", heading_style))
+
+    audio_count = sum(1 for record in data.noise_records if record.audio_file)
+
+    if audio_count > 0:
+        elements.append(make_paragraph(f"측정 당시 녹음본 {audio_count}건이 첨부 자료로 기록되어 있습니다.", normal_style))
+    else:
+        elements.append(make_paragraph("별도 녹음본 첨부 정보는 없습니다.", normal_style))
+
+    # 면책 문구
+    elements.append(Spacer(1, 20))
+    elements.append(make_paragraph(data.disclaimer, small_style))
+
+    doc.build(elements)
+
+    buffer.seek(0)
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename={config['filename']}"
+        }
+    )
+
+
+# ============================================================
 # PDF 생성 API
 # ============================================================
 @router.post("/pdf")
@@ -233,221 +453,7 @@ def create_report_pdf(data: ReportRequest):
     try:
         config = get_report_config(data.report_type)
 
-        buffer = BytesIO()
-
-        doc = SimpleDocTemplate(
-            buffer,
-            pagesize=A4,
-            rightMargin=40,
-            leftMargin=40,
-            topMargin=40,
-            bottomMargin=40,
-        )
-
-        styles = getSampleStyleSheet()
-
-        title_style = ParagraphStyle(
-            "KoreanTitle",
-            parent=styles["Title"],
-            fontName=FONT_NAME,
-            fontSize=18,
-            leading=24,
-            alignment=1,
-            spaceAfter=20,
-        )
-
-        heading_style = ParagraphStyle(
-            "KoreanHeading",
-            parent=styles["Heading2"],
-            fontName=FONT_NAME,
-            fontSize=13,
-            leading=18,
-            spaceBefore=12,
-            spaceAfter=8,
-        )
-
-        normal_style = ParagraphStyle(
-            "KoreanNormal",
-            parent=styles["Normal"],
-            fontName=FONT_NAME,
-            fontSize=10,
-            leading=15,
-        )
-
-        small_style = ParagraphStyle(
-            "KoreanSmall",
-            parent=styles["Normal"],
-            fontName=FONT_NAME,
-            fontSize=8,
-            leading=12,
-            textColor=colors.grey,
-        )
-
-        common_table_style = TableStyle([
-            ("FONTNAME", (0, 0), (-1, -1), FONT_NAME),
-            ("BACKGROUND", (0, 0), (0, -1), colors.lightgrey),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("PADDING", (0, 0), (-1, -1), 6),
-        ])
-
-        elements = []
-
-        # ====================================================
-        # 제목 및 제출 대상
-        # ====================================================
-        elements.append(make_paragraph(config["title"], title_style))
-        elements.append(make_paragraph(f"제출 대상: {config['receiver']}", normal_style))
-        elements.append(make_paragraph(f"작성일: {data.created_at}", normal_style))
-        elements.append(Spacer(1, 12))
-
-        # ====================================================
-        # 1. 신청인 정보
-        # ====================================================
-        elements.append(make_paragraph("1. 신청인 정보", heading_style))
-
-        applicant_table = Table([
-            ["닉네임", data.applicant.nickname],
-            ["아파트명", data.applicant.apartment_name],
-            ["동/호수", f"{data.applicant.dong}동 {data.applicant.ho}호"],
-            ["층수", f"{data.applicant.floor}층"],
-            ["관리사무소 연락처", data.applicant.management_phone or "-"],
-        ], colWidths=[120, 350])
-
-        applicant_table.setStyle(common_table_style)
-        elements.append(applicant_table)
-
-        # ====================================================
-        # 2. 소음 발생 추정 위치
-        # ====================================================
-        elements.append(make_paragraph("2. 소음 발생 추정 위치", heading_style))
-
-        target_location = data.target.location or "위치 불명"
-
-        target_table = Table([
-            ["소음 발생 추정 위치", target_location],
-            ["상세 위치/주소", data.target.address or "-"],
-        ], colWidths=[120, 350])
-
-        target_table.setStyle(common_table_style)
-        elements.append(target_table)
-
-        # ====================================================
-        # 3. 소음 측정 기록
-        # ====================================================
-        elements.append(make_paragraph("3. 소음 측정 기록", heading_style))
-
-        noise_table_data = [[
-            "발생일자", "발생시간", "소음 종류", "지속시간(추정)", "Leq/Lmax"
-        ]]
-
-        for record in data.noise_records:
-            date_part, time_part = split_datetime(record.measured_at)
-
-            noise_name = record.noise_type or "-"
-
-            if record.primary_source:
-                noise_name = f"{record.noise_type} / {record.primary_source}"
-
-            if record.secondary_source:
-                noise_name += f", {record.secondary_source}"
-
-            duration_text = record.duration or "약 1분"
-
-            noise_table_data.append([
-                date_part,
-                time_part,
-                noise_name,
-                duration_text,
-                f"{format_db(record.leq)} / {format_db(record.lmax)} dB",
-            ])
-
-        noise_table = Table(
-            noise_table_data,
-            colWidths=[80, 55, 180, 75, 80]
-        )
-
-        noise_table.setStyle(TableStyle([
-            ("FONTNAME", (0, 0), (-1, -1), FONT_NAME),
-            ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-            ("FONTSIZE", (0, 0), (-1, -1), 7),
-            ("PADDING", (0, 0), (-1, -1), 4),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ]))
-
-        elements.append(noise_table)
-
-        # ====================================================
-        # 4. 반복 소음 패턴 및 피해 요약
-        # ====================================================
-        elements.append(make_paragraph("4. 반복 소음 패턴 및 피해 요약", heading_style))
-
-        auto_summary = summarize_noise_records(data.noise_records)
-
-        if data.damage_summary:
-            damage_text = f"{auto_summary}<br/><br/>사용자 피해 내용: {data.damage_summary}"
-        else:
-            damage_text = auto_summary
-
-        elements.append(make_paragraph(damage_text, normal_style))
-
-        # ====================================================
-        # 5. 요청 사항
-        # ====================================================
-        elements.append(make_paragraph("5. 요청 사항", heading_style))
-
-        for idx, line in enumerate(config["request_lines"], start=1):
-            elements.append(make_paragraph(f"{idx}. {line}", normal_style))
-            elements.append(Spacer(1, 6))
-
-        if data.conclusion:
-            elements.append(Spacer(1, 4))
-            elements.append(make_paragraph("추가 요청 내용", heading_style))
-
-            if data.conclusion.site_inspection:
-                elements.append(make_paragraph(f"① 현장 진단 요청: {data.conclusion.site_inspection}", normal_style))
-                elements.append(Spacer(1, 6))
-
-            if data.conclusion.noise_measurement:
-                elements.append(make_paragraph(f"② 소음 측정 요청: {data.conclusion.noise_measurement}", normal_style))
-                elements.append(Spacer(1, 6))
-
-            if data.conclusion.prevention:
-                elements.append(make_paragraph(f"③ 재발 방지 요청: {data.conclusion.prevention}", normal_style))
-                elements.append(Spacer(1, 6))
-
-        # ====================================================
-        # 6. 첨부 자료
-        # ====================================================
-        elements.append(make_paragraph("6. 첨부 자료", heading_style))
-
-        audio_count = sum(1 for record in data.noise_records if record.audio_file)
-
-        if audio_count > 0:
-            elements.append(make_paragraph(f"측정 당시 녹음본 {audio_count}건이 첨부 자료로 기록되어 있습니다.", normal_style))
-        else:
-            elements.append(make_paragraph("별도 녹음본 첨부 정보는 없습니다.", normal_style))
-
-        # ====================================================
-        # 면책 문구
-        # ====================================================
-        elements.append(Spacer(1, 20))
-        elements.append(make_paragraph(data.disclaimer, small_style))
-
-        doc.build(elements)
-
-        buffer.seek(0)
-
-        filename = config["filename"]
-
-        return StreamingResponse(
-            buffer,
-            media_type="application/pdf",
-            headers={
-                "Content-Disposition": f"attachment; filename={filename}"
-            }
-        )
+        return create_general_report_pdf(data, config)
 
     except HTTPException:
         raise
