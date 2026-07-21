@@ -62,8 +62,6 @@ export function ReportPage() {
   const [userInfo, setUserInfo] = useState<UserMe | null>(null);
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [targetLocation, setTargetLocation] = useState('윗집');
-  const [targetDong, setTargetDong] = useState('');
   const [targetHo, setTargetHo] = useState('');
 
   const [loading, setLoading] = useState(true);
@@ -105,8 +103,8 @@ export function ReportPage() {
       return;
     }
 
-    if (!targetDong.trim() || !targetHo.trim()) {
-      setReportError('소음추정 세대의 동·호수를 입력해 주세요.');
+    if (!targetHo.trim()) {
+      setReportError('소음추정 세대의 호수를 입력해 주세요.');
       return;
     }
 
@@ -138,8 +136,8 @@ export function ReportPage() {
         },
 
         target: {
-          location: targetLocation,
-          address: `${targetDong}동 ${targetHo}호`,
+          location: '',
+          address: `${userInfo.dong || ''}동 ${targetHo}호`,
         },
 
         noise_records: selectedRecords.map(item => ({
@@ -326,52 +324,23 @@ export function ReportPage() {
         <GlassCard style={{ padding: 20, marginBottom: 16 }}>
           <SectionTitle>소음추정 세대 정보</SectionTitle>
 
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            {['윗집', '아래집', '옆집'].map(loc => (
-              <button
-                key={loc}
-                onClick={() => setTargetLocation(loc)}
-                style={{
-                  flex: 1,
-                  padding: '9px 0',
-                  borderRadius: 999,
-                  border: 'none',
-                  background:
-                    targetLocation === loc
-                      ? '#1A3BDB'
-                      : 'rgba(255,255,255,0.7)',
-                  color: targetLocation === loc ? '#fff' : '#7A8AB8',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                }}
-              >
-                {loc}
-              </button>
-            ))}
-          </div>
-
           <div style={{ display: 'flex', gap: 10 }}>
             <div style={{ flex: 1, position: 'relative' }}>
-              <input
-                value={targetDong}
-                onChange={e => setTargetDong(e.target.value.replace(/[^0-9]/g, ''))}
-                placeholder="예: 101"
-                inputMode="numeric"
-                pattern="[0-9]*"
+              <div
                 style={{
                   width: '100%',
                   boxSizing: 'border-box',
                   padding: '13px 32px 13px 15px',
                   borderRadius: 16,
-                  border: '1.5px solid rgba(26,59,219,0.35)',
-                  background: 'rgba(255,255,255,0.75)',
-                  outline: 'none',
+                  border: '1.5px solid rgba(26,59,219,0.15)',
+                  background: 'rgba(255,255,255,0.5)',
                   fontSize: 13,
                   fontWeight: 600,
-                  color: '#0A1866',
+                  color: '#7A8AB8',
                 }}
-              />
+              >
+                {userInfo?.dong || '-'}
+              </div>
               <span
                 style={{
                   position: 'absolute',
@@ -400,7 +369,7 @@ export function ReportPage() {
                   boxSizing: 'border-box',
                   padding: '13px 32px 13px 15px',
                   borderRadius: 16,
-                  border: '1.5px solid rgba(26,59,219,0.35)',
+                  border: '2px solid rgba(26,59,219,0.35)',
                   background: 'rgba(255,255,255,0.75)',
                   outline: 'none',
                   fontSize: 13,
