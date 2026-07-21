@@ -62,7 +62,8 @@ export function ReportPage() {
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [targetLocation, setTargetLocation] = useState('윗집');
-  const [targetAddress, setTargetAddress] = useState('');
+  const [targetDong, setTargetDong] = useState('');
+  const [targetHo, setTargetHo] = useState('');
 
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -103,8 +104,8 @@ export function ReportPage() {
       return;
     }
 
-    if (!targetAddress.trim()) {
-      setReportError('상대세대 동·호수를 입력해 주세요.');
+    if (!targetDong.trim() || !targetHo.trim()) {
+      setReportError('소음추정 세대의 동·호수를 입력해 주세요.');
       return;
     }
 
@@ -137,11 +138,10 @@ export function ReportPage() {
 
         target: {
           location: targetLocation,
-          address: targetAddress,
+          address: `${targetDong}동 ${targetHo}호`,
         },
 
         noise_records: selectedRecords.map(item => ({
-          record_id: item.id,
           measured_at: item.measured_at || '',
           time_zone: item.period,
           noise_type: item.type,
@@ -259,7 +259,7 @@ export function ReportPage() {
             >
               민원서 생성
             </div>
-            <div style={{ fontSize: 12, color: '#7A8AB8', marginTop: 4 }}>
+            <div style={{ fontSize: 12, color: '#7A8AB8', marginTop: 4, fontWeight: 500 }}>
               측정 이력을 선택해 층간소음 민원서 PDF를 생성합니다.
             </div>
           </div>
@@ -293,7 +293,7 @@ export function ReportPage() {
           <SectionTitle>신청인 및 건물 정보</SectionTitle>
 
           {userInfo ? (
-            <div style={{ fontSize: 12, color: '#7A8AB8', lineHeight: 1.8 }}>
+            <div style={{ fontSize: 12, color: '#7A8AB8', lineHeight: 1.8, fontWeight: 500 }}>
               <div>
                 {userInfo.nickname || userInfo.email} ·{' '}
                 {userInfo.apartment_name || '아파트 미입력'}
@@ -309,14 +309,14 @@ export function ReportPage() {
               </div>
             </div>
           ) : (
-            <div style={{ fontSize: 12, color: '#C0271E' }}>
+            <div style={{ fontSize: 12, color: '#C0271E', fontWeight: 500 }}>
               신청인 정보를 불러오지 못했습니다.
             </div>
           )}
         </GlassCard>
 
         <GlassCard style={{ padding: 20, marginBottom: 16 }}>
-          <SectionTitle>상대세대 정보</SectionTitle>
+          <SectionTitle>소음추정 세대 정보</SectionTitle>
 
           <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
             {['윗집', '아래집', '옆집'].map(loc => (
@@ -343,22 +343,79 @@ export function ReportPage() {
             ))}
           </div>
 
-          <input
-            value={targetAddress}
-            onChange={e => setTargetAddress(e.target.value)}
-            placeholder="예: 101동 602호"
-            style={{
-              width: '100%',
-              boxSizing: 'border-box',
-              padding: '13px 15px',
-              borderRadius: 16,
-              border: '1px solid rgba(255,255,255,0.88)',
-              background: 'rgba(255,255,255,0.75)',
-              outline: 'none',
-              fontSize: 13,
-              color: '#0A1866',
-            }}
-          />
+          <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ flex: 1, position: 'relative' }}>
+              <input
+                value={targetDong}
+                onChange={e => setTargetDong(e.target.value.replace(/[^0-9]/g, ''))}
+                placeholder="예: 101"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  padding: '13px 32px 13px 15px',
+                  borderRadius: 16,
+                  border: '1px solid rgba(255,255,255,0.88)',
+                  background: 'rgba(255,255,255,0.75)',
+                  outline: 'none',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: '#0A1866',
+                }}
+              />
+              <span
+                style={{
+                  position: 'absolute',
+                  right: 15,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  color: '#9AA6C0',
+                  pointerEvents: 'none',
+                }}
+              >
+                동
+              </span>
+            </div>
+
+            <div style={{ flex: 1, position: 'relative' }}>
+              <input
+                value={targetHo}
+                onChange={e => setTargetHo(e.target.value.replace(/[^0-9]/g, ''))}
+                placeholder="예: 602"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  padding: '13px 32px 13px 15px',
+                  borderRadius: 16,
+                  border: '1px solid rgba(255,255,255,0.88)',
+                  background: 'rgba(255,255,255,0.75)',
+                  outline: 'none',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: '#0A1866',
+                }}
+              />
+              <span
+                style={{
+                  position: 'absolute',
+                  right: 15,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  color: '#9AA6C0',
+                  pointerEvents: 'none',
+                }}
+              >
+                호
+              </span>
+            </div>
+          </div>
         </GlassCard>
 
         <GlassCard style={{ padding: 20, marginBottom: 20 }}>
@@ -390,7 +447,7 @@ export function ReportPage() {
                 >
                   {stat.val}
                 </div>
-                <div style={{ fontSize: 11, color: '#9AA6C0', marginTop: 2 }}>
+                <div style={{ fontSize: 11, color: '#9AA6C0', marginTop: 2, fontWeight: 500 }}>
                   {stat.unit} · {stat.label}
                 </div>
               </div>
@@ -431,6 +488,7 @@ export function ReportPage() {
               padding: '40px 0',
               color: '#9AA6C0',
               fontSize: 13,
+              fontWeight: 500,
             }}
           >
             이력을 불러오는 중...
@@ -526,12 +584,12 @@ export function ReportPage() {
                       </span>
                     </div>
 
-                    <div style={{ fontSize: 11, color: '#9AA6C0' }}>
+                    <div style={{ fontSize: 11, color: '#9AA6C0', fontWeight: 500 }}>
                       {item.time} · {item.type} · {item.period} · Lmax {item.lmax} dB
                     </div>
 
                     {hasSecondarySource && (
-                      <div style={{ fontSize: 10, color: '#7A8AB8', marginTop: 4 }}>
+                      <div style={{ fontSize: 10, color: '#7A8AB8', marginTop: 4, fontWeight: 500 }}>
                         세부 소음원: {item.secondary_source}
                       </div>
                     )}
@@ -547,6 +605,7 @@ export function ReportPage() {
                   padding: '40px 0',
                   color: '#9AA6C0',
                   fontSize: 13,
+                  fontWeight: 500,
                 }}
               >
                 {history.length === 0
@@ -590,7 +649,7 @@ export function ReportPage() {
             <div style={{ fontSize: 14, fontWeight: 800, color: '#0A1866' }}>
               PDF 생성 완료
             </div>
-            <div style={{ fontSize: 12, color: '#7A8AB8', marginTop: 6 }}>
+            <div style={{ fontSize: 12, color: '#7A8AB8', marginTop: 6, fontWeight: 500 }}>
               새 창에서 PDF가 열렸습니다. 열리지 않았다면 아래 버튼을 눌러주세요.
             </div>
 
@@ -658,6 +717,7 @@ function ErrorBox({ message }: { message: string }) {
         background: 'rgba(217,48,37,0.08)',
         border: '1px solid rgba(217,48,37,0.2)',
         fontSize: 12,
+        fontWeight: 500,
         color: '#C0271E',
         display: 'flex',
         alignItems: 'center',
