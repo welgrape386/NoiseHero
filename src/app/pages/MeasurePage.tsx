@@ -13,7 +13,6 @@ import {
 import {
   apiSaveMeasure,
   apiClassifyNoise,
-  apiGetCalibration,
   LEGAL_STANDARDS,
   isNighttime,
   type NoiseClassifyResponse,
@@ -188,7 +187,6 @@ export function MeasurePage() {
   const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
   const [micError, setMicError] = useState('');
-  const [baselineDb, setBaselineDb] = useState(0);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
@@ -204,13 +202,6 @@ export function MeasurePage() {
 
   const duration = measureType === 'impact' ? 60 : 300;
   const limits = getLimits(measureType);
-  useEffect(() => {
-  apiGetCalibration()
-    .then(cal => {
-      if (cal.baseline_db !== null) setBaselineDb(cal.baseline_db);
-    })
-    .catch(() => {});
-}, []);
   
 
   async function classifyRecordedAudio(file: File) {
@@ -479,10 +470,8 @@ export function MeasurePage() {
     };
   }, []);
 
-  const calibratedLeq = Math.round((leq - baselineDb) * 10) / 10;
-  const calibratedLmax = Math.round((lmax - baselineDb) * 10) / 10;
-  const isLeqOver = calibratedLeq > limits.leqLimit;
-  const isLmaxOver = limits.lmaxLimit !== null && calibratedLmax > limits.lmaxLimit;
+  const isLeqOver = leq > limits.leqLimit;
+  const isLmaxOver = limits.lmaxLimit !== null && lmax > limits.lmaxLimit;
   const isOver = isLeqOver || isLmaxOver;
 
   const progress = Math.min(elapsed / duration, 1);
@@ -919,58 +908,29 @@ export function MeasurePage() {
           )}
 
           {state === 'measuring' && (
-            <>
-              <button
-                onClick={stopMeasure}
-                style={{
-                  flex: 1,
-                  border: 'none',
-                  padding: 16,
-                  borderRadius: 999,
-                  background: 'rgba(255,255,255,0.8)',
-                  backdropFilter: 'blur(8px)',
-                  cursor: 'pointer',
-                  fontFamily: strongFont,
-                  fontSize: 13,
-                  fontWeight: 800,
-                  color: '#0A1866',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 8,
-                }}
-              >
-                <Square size={14} color="#0A1866" fill="#0A1866" />
-                측정 중지
-              </button>
-
-              <button
-                onClick={saveMeasure}
-                disabled={saving || saved || classifying}
-                style={{
-                  flex: 1.4,
-                  border: 'none',
-                  padding: 16,
-                  borderRadius: 999,
-                  background: saved
-                    ? 'rgba(26,59,219,0.2)'
-                    : 'linear-gradient(135deg, #2D52F0, #1A3BDB)',
-                  color: '#fff',
-                  cursor: saving || saved || classifying ? 'default' : 'pointer',
-                  fontFamily: strongFont,
-                  fontSize: 13,
-                  fontWeight: 800,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 8,
-                  opacity: saving || classifying ? 0.7 : 1,
-                }}
-              >
-                {saved ? <CheckCircle size={14} color="#fff" /> : <Save size={14} color="#fff" />}
-                {classifying ? 'AI 분석 중...' : saving ? '저장 중...' : saved ? '저장됨 ✓' : '이력 저장'}
-              </button>
-            </>
+            <button
+              onClick={stopMeasure}
+              style={{
+                flex: 1,
+                border: 'none',
+                padding: 16,
+                borderRadius: 999,
+                background: 'rgba(255,255,255,0.8)',
+                backdropFilter: 'blur(8px)',
+                cursor: 'pointer',
+                fontFamily: strongFont,
+                fontSize: 13,
+                fontWeight: 800,
+                color: '#0A1866',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+              }}
+            >
+              <Square size={14} color="#0A1866" fill="#0A1866" />
+              측정 중지
+            </button>
           )}
 
           {state === 'done' && (
@@ -1017,7 +977,7 @@ export function MeasurePage() {
                 }}
               >
                 {saved ? <CheckCircle size={14} color="#fff" /> : <Save size={14} color="#fff" />}
-                {saving ? '저장 중...' : saved ? '저장 완료 ✓' : '이력 저장'}
+                {classifying ? 'AI 분석 중...' : saving ? '저장 중...' : saved ? '저장 완료 ✓' : '이력 저장'}
               </button>
             </>
           )}

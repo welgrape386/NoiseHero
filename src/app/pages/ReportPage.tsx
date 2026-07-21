@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   CheckCircle,
   RefreshCw,
+  ClipboardList,
 } from 'lucide-react';
 import {
   apiGetHistory,
@@ -202,6 +203,13 @@ export function ReportPage() {
     window.open(pdfUrl, '_blank');
   }
 
+  function handleShowVisitConsultGuide() {
+    alert(
+      '지금 생성된 PDF는 참고용 민원서입니다.\n\n' +
+      '이웃사이센터 "층간소음 방문상담"을 신청하실 때, 이 PDF에 정리된 소음 측정 이력과 세대 정보를 참고하여 방문상담 신청서를 작성해 주세요.'
+    );
+  }
+
   const filtered = history.filter(item => {
     if (filter === 'over') return item.over;
     if (filter === 'ok') return !item.over;
@@ -356,7 +364,7 @@ export function ReportPage() {
                   boxSizing: 'border-box',
                   padding: '13px 32px 13px 15px',
                   borderRadius: 16,
-                  border: '1px solid rgba(255,255,255,0.88)',
+                  border: '1.5px solid rgba(26,59,219,0.35)',
                   background: 'rgba(255,255,255,0.75)',
                   outline: 'none',
                   fontSize: 13,
@@ -392,7 +400,7 @@ export function ReportPage() {
                   boxSizing: 'border-box',
                   padding: '13px 32px 13px 15px',
                   borderRadius: 16,
-                  border: '1px solid rgba(255,255,255,0.88)',
+                  border: '1.5px solid rgba(26,59,219,0.35)',
                   background: 'rgba(255,255,255,0.75)',
                   outline: 'none',
                   fontSize: 13,
@@ -441,6 +449,7 @@ export function ReportPage() {
                   style={{
                     fontFamily: "'Space Grotesk', sans-serif",
                     fontSize: 32,
+                    fontWeight: 700,
                     color: stat.color,
                     lineHeight: 1,
                   }}
@@ -674,6 +683,29 @@ export function ReportPage() {
             >
               <Download size={15} color="#fff" />
               PDF 열기
+            </button>
+
+            <button
+              onClick={handleShowVisitConsultGuide}
+              style={{
+                width: '100%',
+                marginTop: 10,
+                padding: '14px',
+                borderRadius: 16,
+                border: '1px solid rgba(10,24,102,0.18)',
+                background: 'rgba(255,255,255,0.7)',
+                color: '#0A1866',
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+              }}
+            >
+              <ClipboardList size={15} color="#0A1866" />
+              방문상담 신청서 작성 안내
             </button>
           </GlassCard>
         )}
