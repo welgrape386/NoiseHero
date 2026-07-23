@@ -35,7 +35,7 @@ class NoiseRecord(BaseModel):
     time_zone: Optional[str] = ""
     noise_type: Optional[str] = ""
     primary_source: Optional[str] = ""
-    secondary_source: Optional[str] = ""
+    secondary_source: Optional[List[str]] = []
     leq: Optional[float] = 0
     lmax: Optional[float] = 0
     leq_standard: Optional[float] = 0
@@ -261,7 +261,8 @@ async def create_noise_report_pdf(
                 y = 800
             pdf.drawString(left, y, f"{idx}. {record.measured_at} / {record.time_zone} / {record.noise_type}")
             y -= 18
-            pdf.drawString(left + 20, y, f"주소음원: {record.primary_source}   부소음원: {record.secondary_source}")
+            secondary_str = ", ".join(record.secondary_source) if record.secondary_source else "-"
+            pdf.drawString(left + 20, y, f"주소음원: {record.primary_source}   부소음원: {secondary_str}")
             y -= 18
             pdf.drawString(left + 20, y,
                 f"Leq: {record.leq}dB (기준 {record.leq_standard}dB, 초과 {record.leq_exceeded}dB) / "

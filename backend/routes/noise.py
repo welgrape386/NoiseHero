@@ -110,8 +110,10 @@ async def classify_noise(
     with open(temp_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
+    baseline_db = current_user.get("mic_baseline_db")
+
     try:
-        result = classify(temp_path)
+        result = classify(temp_path, baseline_db=baseline_db)
     finally:
         os.remove(temp_path)
 
