@@ -1,0 +1,4 @@
+joblib
+numpy
+librosa
+scikit-learn
