@@ -146,7 +146,9 @@ export function ReportPage() {
           time_zone: item.period,
           noise_type: item.type,
           primary_source: item.primary_source || '',
-          secondary_source: item.secondary_source || '',
+          secondary_source: item.secondary_source
+  ? item.secondary_source.split(',').map(s => s.trim()).filter(Boolean)
+  : [],
           leq: item.db,
           lmax: item.lmax,
           leq_standard: item.leq_standard || 0,
