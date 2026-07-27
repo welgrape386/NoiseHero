@@ -69,6 +69,7 @@ export function ReportPage() {
   const [fetchError, setFetchError] = useState('');
   const [reportError, setReportError] = useState('');
   const [pdfUrl, setPdfUrl] = useState('');
+  const [showVisitGuide, setShowVisitGuide] = useState(false);
 
   async function loadPageData() {
     setLoading(true);
@@ -202,10 +203,7 @@ export function ReportPage() {
   }
 
   function handleShowVisitConsultGuide() {
-    alert(
-      '지금 생성된 PDF는 참고용 민원서입니다.\n\n' +
-      '이웃사이센터 "층간소음 방문상담"을 신청하실 때, 이 PDF에 정리된 소음 측정 이력과 세대 정보를 참고하여 방문상담 신청서를 작성해 주세요.'
-    );
+    setShowVisitGuide(true);
   }
 
   const filtered = history.filter(item => {
@@ -682,12 +680,135 @@ export function ReportPage() {
 
       <TabBar />
 
+      {showVisitGuide && (
+        <VisitGuideSheet onClose={() => setShowVisitGuide(false)} />
+      )}
+
       <style>{`
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
         }
+        @keyframes sheetSlideUp {
+          from { transform: translateY(100%); }
+          to { transform: translateY(0); }
+        }
+        @keyframes sheetFadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
       `}</style>
+    </div>
+  );
+}
+
+function VisitGuideSheet({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 50,
+        background: 'rgba(10,24,102,0.35)',
+        backdropFilter: 'blur(2px)',
+        display: 'flex',
+        alignItems: 'flex-end',
+        justifyContent: 'center',
+        animation: 'sheetFadeIn 0.2s ease',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%',
+          maxWidth: 480,
+          background: '#fff',
+          borderTopLeftRadius: 28,
+          borderTopRightRadius: 28,
+          padding: '10px 24px 28px',
+          animation: 'sheetSlideUp 0.28s cubic-bezier(0.32, 0.72, 0, 1)',
+          boxShadow: '0 -8px 30px rgba(10,24,102,0.15)',
+        }}
+      >
+        {/* 드래그 핸들 */}
+        <div
+          style={{
+            width: 40,
+            height: 4,
+            borderRadius: 999,
+            background: 'rgba(122,138,184,0.35)',
+            margin: '6px auto 18px',
+          }}
+        />
+
+        <div
+          style={{
+            width: 52,
+            height: 52,
+            borderRadius: 16,
+            background: 'linear-gradient(135deg, #2D52F0, #1A3BDB)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 16,
+          }}
+        >
+          <ClipboardList size={24} color="#fff" />
+        </div>
+
+        <div
+          style={{
+            fontSize: 17,
+            fontWeight: 800,
+            color: '#0A1866',
+            marginBottom: 10,
+          }}
+        >
+          방문상담 신청서 작성 안내
+        </div>
+
+        <div
+          style={{
+            fontSize: 13,
+            lineHeight: 1.6,
+            color: '#5A6A94',
+            fontWeight: 500,
+            marginBottom: 8,
+          }}
+        >
+          지금 생성된 PDF는 참고용 민원서입니다.
+        </div>
+
+        <div
+          style={{
+            fontSize: 13,
+            lineHeight: 1.6,
+            color: '#5A6A94',
+            fontWeight: 500,
+            marginBottom: 22,
+          }}
+        >
+          이웃사이센터 '층간소음 방문상담'을 신청하실 때, 이 PDF에 정리된 소음 측정 이력과 세대 정보를 참고하여 방문상담 신청서를 작성해 주세요.
+        </div>
+
+        <button
+          onClick={onClose}
+          style={{
+            width: '100%',
+            padding: '15px',
+            borderRadius: 16,
+            border: 'none',
+            background: 'linear-gradient(135deg, #2D52F0, #1A3BDB)',
+            color: '#fff',
+            fontSize: 14,
+            fontWeight: 700,
+            cursor: 'pointer',
+          }}
+        >
+          확인했어요
+        </button>
+      </div>
     </div>
   );
 }
