@@ -114,8 +114,8 @@ export function HomePage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
           <div>
             <div style={{ fontFamily: strongFont, fontSize: 22, fontWeight: 700, color: '#0A1866' }}>
-              {user.nickname || '층간히어로'}
-            </div>
+  층간히어로
+</div>
             <div style={{ marginTop: 4, fontSize: 11, color: '#9AA6C0', fontWeight: 600 }}>{dateStr}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

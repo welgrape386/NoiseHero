@@ -429,7 +429,7 @@ export function MeasurePage() {
         noise_type,
 
         primary_source: noise_type,
-        secondary_source: getSecondarySource() || '없음',
+        secondary_source: getSecondarySource() ? [getSecondarySource() as string] : ['없음'],
       });
 
       setSaved(true);

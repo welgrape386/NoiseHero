@@ -59,7 +59,7 @@ export type NoiseMeasureRequest = {
   lmax: number;
   noise_type: NoiseType;
   primary_source?: string;
-  secondary_source?: string;
+  secondary_source?: string[];
 };
 
 export type NoiseRecord = {
@@ -69,7 +69,7 @@ export type NoiseRecord = {
   lmax: number;
   noise_type: string;
   primary_source?: string;
-  secondary_source?: string;
+  secondary_source?: string[];
   time_zone: string;
   leq_standard: number;
   lmax_standard?: number | null;
@@ -92,7 +92,7 @@ export type HistoryItem = {
   leq_standard?: number;
   lmax_standard?: number | null;
   primary_source?: string;
-  secondary_source?: string;
+  secondary_source?: string[];
   device_baseline_db?: number | null;
   calibrated_leq?: number;
   calibrated_lmax?: number;  
@@ -152,7 +152,7 @@ export type ReportNoiseRecord = {
   noise_type: string;
   time_zone: string;
   primary_source?: string;
-  secondary_source?: string;
+  secondary_source?: string[];
   leq: number;
   lmax: number;
   leq_standard: number;
@@ -271,7 +271,7 @@ export async function apiSaveMeasure(data: {
   is_violation?: boolean;
   memo?: string;
   noise_type?: NoiseType;
-  secondary_source?: string;
+  secondary_source?: string[];
   primary_source?: string;
 }) {
   return request<{ message: string; record: NoiseRecord }>('/noise/measure', {

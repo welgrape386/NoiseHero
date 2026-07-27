@@ -41,8 +41,12 @@ function GlassCard({
   );
 }
 
-function isValidSource(value?: string) {
+function isValidSource(value?: string | string[]) {
   if (!value) return false;
+
+  if (Array.isArray(value)) {
+    return value.some(v => isValidSource(v));
+  }
 
   const trimmed = value.trim();
 
@@ -146,9 +150,11 @@ export function ReportPage() {
           time_zone: item.period,
           noise_type: item.type,
           primary_source: item.primary_source || '',
-          secondary_source: item.secondary_source
-  ? item.secondary_source.split(',').map(s => s.trim()).filter(Boolean)
-  : [],
+          secondary_source: Array.isArray(item.secondary_source)
+            ? item.secondary_source
+            : (item.secondary_source
+                ? String(item.secondary_source).split(',').map(s => s.trim()).filter(Boolean)
+                : []),
           leq: item.db,
           lmax: item.lmax,
           leq_standard: item.leq_standard || 0,
@@ -568,7 +574,7 @@ export function ReportPage() {
 
                     {hasSecondarySource && (
                       <div style={{ fontSize: 10, color: '#7A8AB8', marginTop: 4, fontWeight: 500 }}>
-                        세부 소음원: {item.secondary_source}
+                        세부 소음원: {Array.isArray(item.secondary_source) ? item.secondary_source.join(', ') : item.secondary_source}
                       </div>
                     )}
                   </div>
