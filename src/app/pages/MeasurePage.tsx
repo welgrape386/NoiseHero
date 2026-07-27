@@ -373,26 +373,15 @@ export function MeasurePage() {
   function getPrimarySource() {
     if (!classifyResult) return undefined;
 
-    const source =
-      classifyResult.primary_source ||
-      classifyResult.label ||
-      classifyResult.predicted_class ||
-      classifyResult.category ||
-      classifyResult.description ||
-      (typeof classifyResult.result === 'string' ? classifyResult.result : undefined)
+    const source = classifyResult.primary_source;
 
     return isValidSource(source) ? source : undefined;
   }
 
-  function getSecondarySource() {
-    if (!classifyResult) return undefined;
+  function getSecondarySource(): string[] {
+    if (!classifyResult) return [];
 
-    return (
-      classifyResult.secondary_source ||
-      classifyResult.description ||
-      classifyResult.sub_label ||
-      (typeof classifyResult.result === 'string' ? classifyResult.result : undefined)
-    );
+    return classifyResult.secondary_source ?? [];
   }
 
   function getDetectedNoiseType(): NoiseType {
@@ -429,7 +418,7 @@ export function MeasurePage() {
         noise_type,
 
         primary_source: noise_type,
-        secondary_source: getSecondarySource() ? [getSecondarySource() as string] : ['없음'],
+        secondary_source: getSecondarySource().length > 0 ? getSecondarySource() : ['없음'],
       });
 
       setSaved(true);
@@ -498,7 +487,7 @@ export function MeasurePage() {
   const aiChips = classifyResult
     ? [
         primarySource && `주소음원: ${primarySource}`,
-        secondarySource && `부소음원: ${secondarySource}`,
+        secondarySource.length > 0 && `부소음원: ${secondarySource.join(', ')}`,
         detectedNoiseType,
         `${limits.label} 기준`,
         `Leq 기준 ${standard?.leq ?? limits.leqLimit}dB`,

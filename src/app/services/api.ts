@@ -116,7 +116,7 @@ export type ChatbotResponse = {
 export type NoiseClassifyResponse = {
   noise_type?: NoiseType | string;
   primary_source?: string;
-  secondary_source?: string;
+  secondary_source?: string[];
 
   description?: string;
 
@@ -178,6 +178,20 @@ export function clearAuth() {
   localStorage.removeItem(USER_KEY);
 }
 
+function handleUnauthorized(status: number, path: string) {
+  if (status !== 401) return;
+
+  clearAuth();
+
+  const isAuthEndpoint = path.startsWith('/auth/login') || path.startsWith('/auth/signup');
+
+  if (typeof window !== 'undefined' && !isAuthEndpoint) {
+    window.location.href = '/login';
+  }
+
+  throw new Error('세션이 만료되었습니다. 다시 로그인해주세요.');
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {}
@@ -208,6 +222,8 @@ async function request<T>(
   } catch {
     data = null;
   }
+
+  handleUnauthorized(res.status, path);
 
   if (!res.ok || data?.success === false) {
     const message =
@@ -338,6 +354,8 @@ export async function apiClassifyNoise(file: File) {
     data = null;
   }
 
+  handleUnauthorized(res.status, '/noise/classify');
+
   if (!res.ok || data?.success === false) {
     const message =
       data?.detail ||
@@ -380,6 +398,8 @@ export async function apiCreateReportPdf(payload: ReportPdfRequest) {
     headers,
     body: JSON.stringify(payload),
   });
+
+  handleUnauthorized(res.status, '/report/pdf');
 
   if (!res.ok) {
     let data: any = null;

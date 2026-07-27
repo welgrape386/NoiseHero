@@ -121,8 +121,6 @@ export function MyPage() {
   const navigate = useNavigate();
 
   const [modal, setModal] = useState<Modal>(null);
-  const [calibrating, setCalibrating] = useState(false);
-  const [calibDone, setCalibDone] = useState(false);
   const [loadingUser, setLoadingUser] = useState(true);
 
   const stored = (() => {
@@ -229,21 +227,6 @@ export function MyPage() {
     }
   }
 
-  function startCalibration() {
-    setCalibrating(true);
-    setCalibDone(false);
-
-    setTimeout(() => {
-      const offset = Math.round((Math.random() * 4 - 2) * 10) / 10;
-      const updated: UserState = { ...user, micOffset: offset };
-
-      setUser(updated);
-      localStorage.setItem('noise_user', JSON.stringify(updated));
-      setCalibrating(false);
-      setCalibDone(true);
-    }, 3000);
-  }
-
   function handleLogout() {
     clearAuth();
     navigate('/login');
@@ -331,6 +314,10 @@ export function MyPage() {
 
           <div style={{ borderBottom: '1px solid rgba(26,59,219,0.06)' }}>
             <MenuItem icon={<Building size={17} color="#1A3BDB" />} label="아파트 정보" sub={user.apartment_name || '아파트명, 동/호수, 층수 입력'} onClick={() => setModal('apartment')} />
+          </div>
+
+          <div style={{ borderBottom: '1px solid rgba(26,59,219,0.06)' }}>
+            <MenuItem icon={<Volume2 size={17} color="#1A3BDB" />} label="마이크 보정" sub="측정 정확도를 높이는 마이크 보정" onClick={() => navigate('/calibration')} />
           </div>
 
           <MenuItem icon={<Bell size={17} color="#1A3BDB" />} label="알림 설정" sub="기준 초과 알림 관리" onClick={() => {}} />
