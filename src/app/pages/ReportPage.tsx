@@ -697,9 +697,9 @@ export function ReportPage() {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
         }
-        @keyframes sheetSlideUp {
-          from { transform: translateY(100%); }
-          to { transform: translateY(0); }
+        @keyframes centerModalPop {
+          from { transform: scale(0.92); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
         }
         @keyframes sheetFadeIn {
           from { opacity: 0; }
@@ -721,8 +721,9 @@ function VisitGuideSheet({ onClose }: { onClose: () => void }) {
         background: 'rgba(10,24,102,0.35)',
         backdropFilter: 'blur(2px)',
         display: 'flex',
-        alignItems: 'flex-end',
+        alignItems: 'center',
         justifyContent: 'center',
+        padding: '0 20px',
         animation: 'sheetFadeIn 0.2s ease',
       }}
     >
@@ -730,26 +731,18 @@ function VisitGuideSheet({ onClose }: { onClose: () => void }) {
         onClick={e => e.stopPropagation()}
         style={{
           width: '100%',
-          maxWidth: 480,
+          maxWidth: 400,
           background: '#fff',
-          borderTopLeftRadius: 28,
-          borderTopRightRadius: 28,
-          padding: '10px 24px 28px',
-          animation: 'sheetSlideUp 0.28s cubic-bezier(0.32, 0.72, 0, 1)',
-          boxShadow: '0 -8px 30px rgba(10,24,102,0.15)',
+          borderRadius: 28,
+          padding: '32px 24px 28px',
+          animation: 'centerModalPop 0.22s cubic-bezier(0.32, 0.72, 0, 1)',
+          boxShadow: '0 20px 50px rgba(10,24,102,0.25)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          textAlign: 'center',
         }}
       >
-        {/* 드래그 핸들 */}
-        <div
-          style={{
-            width: 40,
-            height: 4,
-            borderRadius: 999,
-            background: 'rgba(122,138,184,0.35)',
-            margin: '6px auto 18px',
-          }}
-        />
-
         <div
           style={{
             width: 52,
