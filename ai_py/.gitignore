@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+.env
+legal_data/legal_index.faiss
+legal_data/legal_chunks_meta.pkl

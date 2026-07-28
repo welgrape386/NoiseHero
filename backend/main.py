@@ -1,11 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from database import db
 from routes.auth import router as auth_router
+from routes.complaint import router as complaint_router
 from routes.noise import router as noise_router
 from routes.report import router as report_router
 from routes.agency import router as agency_router
 from routes.chatbot import router as chatbot_router
+
 
 app = FastAPI()
 
@@ -13,19 +16,31 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://noise-on.vercel.app",
-        "http://localhost:5 173",
+        "http://localhost:5173",
         "http://127.0.0.1:5173",
     ],
     allow_credentials=True,
-
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# 인증 API
 app.include_router(auth_router, prefix="/auth")
+
+# GPT 민원서 생성 API
+app.include_router(complaint_router)
+
+# 소음 측정/분류 API
 app.include_router(noise_router, prefix="/noise")
-app.include_router(report_router, prefix="/report")
+
+# PDF 민원서 생성 API
+# report.py 내부에 이미 prefix="/report"가 있으므로 여기서는 prefix를 또 붙이지 않음
+app.include_router(report_router)
+
+# 기관 정보 API
 app.include_router(agency_router, prefix="/agency")
+
+# 챗봇 API
 app.include_router(chatbot_router, prefix="/chatbot")
 
 
@@ -40,4 +55,4 @@ async def startup():
 
 @app.get("/")
 async def read_root():
-    return {"message": "NoiseGuard 서버 켜짐!"}
+    return {"message": "층간히어로 서버 켜짐!"}
