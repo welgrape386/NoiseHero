@@ -76,7 +76,7 @@ class Building(BaseModel):
 
 
 class NoiseRecord(BaseModel):
-    record_id: Optional[str] = None  # 실제 저장된 측정 기록의 _id. 있으면 DB 원본값(보정 반영)으로 덮어씀
+    record_id: Optional[str] = None  # 실제 저장된 측정 기록의 _id. 있으면 DB 원본값으로 덮어씀
     measured_at: Optional[str] = ""
     time_zone: Optional[str] = ""
     noise_type: Optional[str] = ""
@@ -188,7 +188,7 @@ async def resolve_noise_records(records: List[NoiseRecord], email: str):
 
 
 def recompute_statistics(records: List[NoiseRecord]):
-    """DB에서 조회한 보정 반영 기록을 기준으로 통계를 서버에서 다시 계산한다."""
+    """DB에서 조회한 원본 기록을 기준으로 통계를 서버에서 다시 계산한다."""
     total_count = len(records)
     if total_count == 0:
         return Statistics()
