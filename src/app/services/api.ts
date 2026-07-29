@@ -160,7 +160,14 @@ export type ReportNoiseRecord = {
   is_exceeded: boolean;
 };
 
+export type ReportType =
+  | 'neighbor_center'
+  | 'dispute_committee'
+  | 'management_office'
+  | 'official_required_forms';
+
 export type ReportPdfRequest = {
+  report_type?: ReportType;
   selected_record_ids: string[];
   target: ReportTargetInfo;
 };

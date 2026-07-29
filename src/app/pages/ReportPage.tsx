@@ -8,6 +8,7 @@ import {
   CheckCircle,
   RefreshCw,
   ClipboardList,
+  Building2,
 } from 'lucide-react';
 import {
   apiGetHistory,
@@ -16,6 +17,7 @@ import {
   mapRecord,
   type HistoryItem,
   type UserMe,
+  type ReportType,
 } from '../services/api';
 
 function GlassCard({
@@ -70,9 +72,11 @@ export function ReportPage() {
 
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [generatingManagement, setGeneratingManagement] = useState(false);
   const [fetchError, setFetchError] = useState('');
   const [reportError, setReportError] = useState('');
   const [pdfUrl, setPdfUrl] = useState('');
+  const [managementPdfUrl, setManagementPdfUrl] = useState('');
   const [showVisitGuide, setShowVisitGuide] = useState(false);
 
   async function loadPageData() {
@@ -102,7 +106,9 @@ export function ReportPage() {
     );
   }
 
-  async function handleGenerateReport() {
+  async function generateReport(reportType: ReportType) {
+    const isManagement = reportType === 'management_office';
+
     if (!userInfo) {
       setReportError('신청인 정보를 불러오지 못했습니다.');
       return;
@@ -118,9 +124,14 @@ export function ReportPage() {
       return;
     }
 
-    setGenerating(true);
+    if (isManagement) {
+      setGeneratingManagement(true);
+      setManagementPdfUrl('');
+    } else {
+      setGenerating(true);
+      setPdfUrl('');
+    }
     setReportError('');
-    setPdfUrl('');
 
     try {
       const selectedRecords = history.filter(item => selectedIds.includes(item.id));
@@ -128,7 +139,10 @@ export function ReportPage() {
       const exceededCount = selectedRecords.filter(r => r.over).length;
 
       const blob = await apiCreateReportPdf({
-        title: '층간소음 피해 현장진단 신청서',
+        report_type: reportType,
+        title: isManagement
+          ? '층간소음 피해 관리사무소 민원서'
+          : '층간소음 피해 현장진단 신청서',
         created_at: new Date().toISOString().slice(0, 10),
 
         applicant: {
@@ -179,26 +193,48 @@ export function ReportPage() {
 
         damage_summary: `피해기간: 약 ${selectedRecords.length}일`,
 
-        conclusion: {
-          site_inspection: `${userInfo.apartment_name || ''} ${userInfo.dong || ''}동 ${userInfo.ho || ''}호의 피해 세대에 대한 현장 진단을 요청합니다.`,
-          noise_measurement: '주간 및 야간의 소음 측정을 요청합니다.',
-          prevention: '상대 세대에 대한 경고 조치와 재발 방지 방안을 마련해 주실 것을 요청합니다.',
-        },
+        conclusion: isManagement
+          ? {
+              site_inspection: `${userInfo.apartment_name || ''} ${userInfo.dong || ''}동 ${userInfo.ho || ''}호의 피해 세대에 대한 관리사무소 차원의 사실 확인을 요청합니다.`,
+              noise_measurement: '관리사무소 입회 하에 소음 측정을 요청합니다.',
+              prevention: '상대 세대에 대한 안내 및 재발 방지 조치를 요청합니다.',
+            }
+          : {
+              site_inspection: `${userInfo.apartment_name || ''} ${userInfo.dong || ''}동 ${userInfo.ho || ''}호의 피해 세대에 대한 현장 진단을 요청합니다.`,
+              noise_measurement: '주간 및 야간의 소음 측정을 요청합니다.',
+              prevention: '상대 세대에 대한 경고 조치와 재발 방지 방안을 마련해 주실 것을 요청합니다.',
+            },
 
         disclaimer: '※ 본 문서는 참고용이며 법적 효력을 보장하지 않습니다.'
       } as any);
 
       const url = window.URL.createObjectURL(blob);
 
-      setPdfUrl(url);
+      if (isManagement) {
+        setManagementPdfUrl(url);
+      } else {
+        setPdfUrl(url);
+      }
       window.open(url, '_blank');
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : '민원서 생성에 실패했습니다.';
       setReportError(msg);
     } finally {
-      setGenerating(false);
+      if (isManagement) {
+        setGeneratingManagement(false);
+      } else {
+        setGenerating(false);
+      }
     }
+  }
+
+  function handleGenerateReport() {
+    generateReport('neighbor_center');
+  }
+
+  function handleGenerateManagementReport() {
+    generateReport('management_office');
   }
 
   function handleDownloadPdf() {
@@ -208,6 +244,15 @@ export function ReportPage() {
     }
 
     window.open(pdfUrl, '_blank');
+  }
+
+  function handleDownloadManagementPdf() {
+    if (!managementPdfUrl) {
+      alert('먼저 관리사무소용 민원서를 생성해 주세요.');
+      return;
+    }
+
+    window.open(managementPdfUrl, '_blank');
   }
 
   function handleShowVisitConsultGuide() {
@@ -627,6 +672,68 @@ export function ReportPage() {
           <FileText size={16} color="#fff" />
           {generating ? '민원서 생성 중...' : `민원서 생성하기 (${selectedIds.length}개 선택)`}
         </button>
+
+        <button
+          onClick={handleGenerateManagementReport}
+          disabled={generatingManagement}
+          style={{
+            width: '100%',
+            marginTop: 10,
+            padding: '15px',
+            borderRadius: 18,
+            border: '1px solid rgba(10,24,102,0.18)',
+            background: generatingManagement
+              ? 'rgba(255,255,255,0.5)'
+              : 'rgba(255,255,255,0.7)',
+            color: '#0A1866',
+            fontSize: 14,
+            fontWeight: 700,
+            cursor: generatingManagement ? 'wait' : 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+          }}
+        >
+          <Building2 size={16} color="#0A1866" />
+          {generatingManagement
+            ? '관리사무소용 민원서 생성 중...'
+            : `관리사무소용 민원서 생성하기 (${selectedIds.length}개 선택)`}
+        </button>
+
+        {managementPdfUrl && (
+          <GlassCard style={{ padding: 20, marginTop: 18 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: '#0A1866' }}>
+              관리사무소용 PDF 생성 완료
+            </div>
+            <div style={{ fontSize: 12, color: '#7A8AB8', marginTop: 6, fontWeight: 500 }}>
+              새 창에서 PDF가 열렸습니다. 열리지 않았다면 아래 버튼을 눌러주세요.
+            </div>
+
+            <button
+              onClick={handleDownloadManagementPdf}
+              style={{
+                width: '100%',
+                marginTop: 16,
+                padding: '14px',
+                borderRadius: 16,
+                border: 'none',
+                background: '#0A1866',
+                color: '#fff',
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+              }}
+            >
+              <Download size={15} color="#fff" />
+              관리사무소용 PDF 열기
+            </button>
+          </GlassCard>
+        )}
 
         {pdfUrl && (
           <GlassCard style={{ padding: 20, marginTop: 18 }}>

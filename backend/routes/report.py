@@ -91,6 +91,7 @@ class Conclusion(BaseModel):
 class ReportRequest(BaseModel):
     # neighbor_center: 이웃사이센터용 PDF
     # dispute_committee: 분쟁조정위원회용 PDF
+    # management_office: 관리사무소용 PDF
     # official_required_forms: 공식 제출서류 PDF
     report_type: str = "neighbor_center"
 
@@ -300,6 +301,18 @@ def get_report_config(report_type: str):
             ],
         }
 
+    if report_type == "management_office":
+        return {
+            "title": "층간소음 피해 관리사무소 민원서",
+            "receiver": "관리사무소",
+            "filename": "management_office_report.pdf",
+            "request_lines": [
+                "반복적으로 발생하는 층간소음으로 인한 생활 불편이 지속되고 있어, 관리사무소 차원의 사실 확인 및 중재를 요청합니다.",
+                "필요 시 관리사무소 입회 하에 소음 측정과 상대 세대에 대한 안내·경고 조치를 요청합니다.",
+                "저장된 소음 기록과 피해 내용을 바탕으로 공동주택관리규약에 따른 조치를 검토해주시기 바랍니다.",
+            ],
+        }
+
     if report_type == "official_required_forms":
         return {
             "title": "방문상담 및 소음측정 신청서 등",
@@ -310,7 +323,7 @@ def get_report_config(report_type: str):
 
     raise HTTPException(
         status_code=400,
-        detail="지원하지 않는 PDF 유형입니다. report_type은 neighbor_center, dispute_committee, official_required_forms만 가능합니다."
+        detail="지원하지 않는 PDF 유형입니다. report_type은 neighbor_center, dispute_committee, management_office, official_required_forms만 가능합니다."
     )
 
 
