@@ -43,7 +43,7 @@ function GlassCard({
   );
 }
 
-function isValidSource(value?: string | string[]) {
+function isValidSource(value?: string | string[]): boolean {
   if (!value) return false;
 
   if (Array.isArray(value)) {
