@@ -40,17 +40,10 @@ async def create_noise_record(
     leq_standard = standard[time_zone]["leq"]
     lmax_standard = standard[time_zone]["lmax"]
 
-    # 마이크 보정 기준값 반영: 보정을 했다면 (측정값 - 기준값)을 법적 기준과 비교하고,
-    # 보정을 안 한 사용자는 raw 측정값을 그대로 사용한다.
-    baseline_db = current_user.get("mic_baseline_db")
-    calibrated_leq = round(noise.leq - baseline_db, 1) if baseline_db is not None else None
-    calibrated_lmax = round(noise.lmax - baseline_db, 1) if baseline_db is not None else None
-
-    eval_leq = calibrated_leq if calibrated_leq is not None else noise.leq
-    eval_lmax = calibrated_lmax if calibrated_lmax is not None else noise.lmax
-
-    leq_exceeded = eval_leq > leq_standard
-    lmax_exceeded = (lmax_standard is not None) and (eval_lmax > lmax_standard)
+    # mic_baseline_db(마이크 보정값)는 classify()의 무음 판정(비교 전용)에만 쓰는 값이라
+    # 여기서는 쓰지 않는다. 위반 판정은 원본 Leq/Lmax를 법적 기준과 그대로 비교한다.
+    leq_exceeded = noise.leq > leq_standard
+    lmax_exceeded = (lmax_standard is not None) and (noise.lmax > lmax_standard)
     is_exceeded = leq_exceeded or lmax_exceeded
 
     record = {
@@ -64,9 +57,6 @@ async def create_noise_record(
         "leq_standard": leq_standard,
         "lmax_standard": lmax_standard,
         "is_exceeded": is_exceeded,
-        "device_baseline_db": baseline_db,
-        "calibrated_leq": calibrated_leq,
-        "calibrated_lmax": calibrated_lmax,
         "measured_at": now
     }
 

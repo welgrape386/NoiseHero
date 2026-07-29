@@ -133,10 +133,10 @@ class ReportRequest(BaseModel):
 
 
 # ============================================================
-# DB 조회 및 보정값 반영
+# DB 조회 (보정값 없이 원본 Leq/Lmax 사용)
 # ============================================================
 async def resolve_noise_records(records: List[NoiseRecord], email: str):
-    """record_id가 있는 항목은 클라이언트가 보낸 값을 무시하고 DB 원본(보정값 반영)으로 덮어쓴다."""
+    """record_id가 있는 항목은 클라이언트가 보낸 값을 무시하고 DB 원본으로 덮어쓴다."""
     object_ids = []
     for r in records:
         if r.record_id:
@@ -160,12 +160,8 @@ async def resolve_noise_records(records: List[NoiseRecord], email: str):
 
         leq_standard = doc.get("leq_standard") or 0
         lmax_standard = doc.get("lmax_standard") or 0
-        eval_leq = doc.get("calibrated_leq")
-        if eval_leq is None:
-            eval_leq = doc.get("leq", 0)
-        eval_lmax = doc.get("calibrated_lmax")
-        if eval_lmax is None:
-            eval_lmax = doc.get("lmax", 0)
+        eval_leq = doc.get("leq", 0)
+        eval_lmax = doc.get("lmax", 0)
 
         measured_at = doc.get("measured_at")
         measured_at_str = measured_at.isoformat() if hasattr(measured_at, "isoformat") else (measured_at or r.measured_at)
