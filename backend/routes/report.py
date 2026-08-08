@@ -303,9 +303,9 @@ def get_report_config(report_type: str):
 
     if report_type == "management_office":
         return {
-            "title": "층간소음 피해 관리사무소 민원서",
+            "title": "층간소음 방문상담 신청서",
             "receiver": "관리사무소",
-            "filename": "management_office_report.pdf",
+            "filename": "management_office_visit_application.pdf",
             "request_lines": [
                 "반복적으로 발생하는 층간소음으로 인한 생활 불편이 지속되고 있어, 관리사무소 차원의 사실 확인 및 중재를 요청합니다.",
                 "필요 시 관리사무소 입회 하에 소음 측정과 상대 세대에 대한 안내·경고 조치를 요청합니다.",
@@ -1423,6 +1423,40 @@ def add_official_page_5_confirmation(elements, data: ReportRequest, styles: dict
 
 
 # ============================================================
+# 관리사무소용 PDF 생성
+# [별지 제1호서식] 층간소음 방문상담 신청서 1장만 생성
+# ============================================================
+def create_management_office_pdf(data: ReportRequest, config: dict):
+    buffer = BytesIO()
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=42,
+        leftMargin=42,
+        topMargin=35,
+        bottomMargin=35,
+    )
+
+    styles = get_form_styles()
+    elements = []
+
+    add_official_page_1_visit_application(elements, data, styles)
+
+    doc.build(elements)
+
+    buffer.seek(0)
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename={config['filename']}"
+        }
+    )
+
+
+# ============================================================
 # HWP 기반 공식 제출서류 PDF 생성
 # ============================================================
 def create_official_required_forms_pdf(data: ReportRequest, config: dict):
@@ -1477,6 +1511,9 @@ def create_report_pdf(data: ReportRequest):
 
         if data.report_type == "official_required_forms":
             return create_official_required_forms_pdf(data, config)
+
+        if data.report_type == "management_office":
+            return create_management_office_pdf(data, config)
 
         return create_general_report_pdf(data, config)
 
