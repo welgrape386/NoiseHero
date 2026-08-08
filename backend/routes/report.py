@@ -1534,6 +1534,40 @@ def add_official_page_5_confirmation(elements, data: ReportRequest, styles: dict
 
 
 # ============================================================
+# 관리사무소용 민원서 PDF 생성
+# [별지 제1호서식] 층간소음 방문상담 신청서 1페이지만 사용
+# ============================================================
+def create_management_office_pdf(data: ReportRequest, config: dict):
+    buffer = BytesIO()
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=42,
+        leftMargin=42,
+        topMargin=35,
+        bottomMargin=35,
+    )
+
+    styles = get_form_styles()
+    elements = []
+
+    add_official_page_1_visit_application(elements, data, styles)
+
+    doc.build(elements)
+
+    buffer.seek(0)
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename={config['filename']}"
+        }
+    )
+
+
+# ============================================================
 # 공식 제출서류 PDF 생성
 # ============================================================
 def create_official_required_forms_pdf(data: ReportRequest, config: dict):
@@ -1599,6 +1633,8 @@ async def create_report_pdf(
 
         if request.report_type == "official_required_forms":
             response = create_official_required_forms_pdf(request, config)
+        elif request.report_type == "management_office":
+            response = create_management_office_pdf(request, config)
         else:
             response = create_general_report_pdf(request, config)
 
