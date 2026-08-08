@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from io import BytesIO
 from collections import Counter
+from datetime import datetime
 
 from reportlab.platypus import (
     SimpleDocTemplate,
@@ -20,7 +21,11 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
 import os
+from bson import ObjectId
+from bson.errors import InvalidId
 
+from database import noise_collection, report_collection
+from routes.auth import get_current_user
 
 router = APIRouter(prefix="/report", tags=["Report"])
 
@@ -29,10 +34,14 @@ router = APIRouter(prefix="/report", tags=["Report"])
 # 한글 폰트 등록
 # ============================================================
 def register_korean_font():
-    font_path = "C:/Windows/Fonts/malgun.ttf"
+    bundled_path = os.path.join(os.path.dirname(__file__), "..", "fonts", "NANUMGOTHIC.TTF")
+    if os.path.exists(bundled_path):
+        pdfmetrics.registerFont(TTFont("NanumGothic", bundled_path))
+        return "NanumGothic"
 
-    if os.path.exists(font_path):
-        pdfmetrics.registerFont(TTFont("MalgunGothic", font_path))
+    windows_path = "C:/Windows/Fonts/malgun.ttf"
+    if os.path.exists(windows_path):
+        pdfmetrics.registerFont(TTFont("MalgunGothic", windows_path))
         return "MalgunGothic"
 
     return "Helvetica"
@@ -45,17 +54,17 @@ FONT_NAME = register_korean_font()
 # 요청 JSON 모델
 # ============================================================
 class Applicant(BaseModel):
-    nickname: str
-    apartment_name: str
-    dong: str
-    ho: str
-    floor: str
-    management_phone: Optional[str] = None
+    nickname: Optional[str] = ""
+    apartment_name: Optional[str] = ""
+    dong: Optional[str] = ""
+    ho: Optional[str] = ""
+    floor: Optional[str] = ""
+    management_phone: Optional[str] = ""
 
 
 class Target(BaseModel):
-    location: Optional[str] = None
-    address: Optional[str] = None
+    location: Optional[str] = ""
+    address: Optional[str] = ""
 
 
 class Building(BaseModel):
@@ -67,19 +76,34 @@ class Building(BaseModel):
 
 
 class NoiseRecord(BaseModel):
-    measured_at: str
-    time_zone: str
-    noise_type: str
-    primary_source: str
-    secondary_source: Optional[str] = None
-    leq: float
-    lmax: float
-    leq_standard: Optional[float] = None
-    lmax_standard: Optional[float] = None
-    leq_exceeded: Optional[float] = None
-    lmax_exceeded: Optional[float] = None
+    record_id: Optional[str] = None  # 실제 저장된 측정 기록의 _id. 있으면 DB 원본값으로 덮어씀
+    measured_at: Optional[str] = ""
+    time_zone: Optional[str] = ""
+    noise_type: Optional[str] = ""
+    primary_source: Optional[str] = ""
+    secondary_source: Optional[List[str]] = []
+    leq: Optional[float] = 0
+    lmax: Optional[float] = 0
+    leq_standard: Optional[float] = 0
+    lmax_standard: Optional[float] = 0
+    leq_exceeded: Optional[float] = 0
+    lmax_exceeded: Optional[float] = 0
     duration: Optional[str] = None
     audio_file: Optional[str] = None
+
+
+class Statistics(BaseModel):
+    total_count: Optional[int] = 0
+    exceeded_count: Optional[int] = 0
+    exceed_rate: Optional[float] = 0
+    avg_leq: Optional[float] = 0
+    avg_lmax: Optional[float] = 0
+    max_leq: Optional[float] = 0
+    max_leq_at: Optional[str] = ""
+    max_lmax: Optional[float] = 0
+    max_lmax_at: Optional[str] = ""
+    daytime_count: Optional[int] = 0
+    nighttime_count: Optional[int] = 0
 
 
 class Conclusion(BaseModel):
@@ -97,15 +121,102 @@ class ReportRequest(BaseModel):
 
     title: Optional[str] = None
 
-    created_at: str
+    created_at: Optional[str] = ""
     applicant: Applicant
     target: Target
     building: Optional[Building] = None
 
-    noise_records: List[NoiseRecord]
+    noise_records: List[NoiseRecord] = []
+    statistics: Optional[Statistics] = None
     damage_summary: Optional[str] = None
     conclusion: Optional[Conclusion] = None
     disclaimer: Optional[str] = "※ 본 문서는 AI가 작성한 초안이며 최종 제출 책임은 신청인에게 있습니다."
+
+
+# ============================================================
+# DB 조회 (보정값 없이 원본 Leq/Lmax 사용)
+# ============================================================
+async def resolve_noise_records(records: List[NoiseRecord], email: str):
+    """record_id가 있는 항목은 클라이언트가 보낸 값을 무시하고 DB 원본으로 덮어쓴다."""
+    object_ids = []
+    for r in records:
+        if r.record_id:
+            try:
+                object_ids.append(ObjectId(r.record_id))
+            except InvalidId:
+                pass
+
+    db_docs_by_id = {}
+    if object_ids:
+        cursor = noise_collection.find({"_id": {"$in": object_ids}, "email": email})
+        async for doc in cursor:
+            db_docs_by_id[str(doc["_id"])] = doc
+
+    resolved = []
+    for r in records:
+        doc = db_docs_by_id.get(r.record_id) if r.record_id else None
+        if doc is None:
+            resolved.append(r)
+            continue
+
+        leq_standard = doc.get("leq_standard") or 0
+        lmax_standard = doc.get("lmax_standard") or 0
+        eval_leq = doc.get("leq", 0)
+        eval_lmax = doc.get("lmax", 0)
+
+        measured_at = doc.get("measured_at")
+        measured_at_str = measured_at.isoformat() if hasattr(measured_at, "isoformat") else (measured_at or r.measured_at)
+
+        resolved.append(NoiseRecord(
+            record_id=r.record_id,
+            measured_at=measured_at_str,
+            time_zone=doc.get("time_zone", r.time_zone),
+            noise_type=doc.get("noise_type", r.noise_type),
+            primary_source=doc.get("primary_source", r.primary_source),
+            secondary_source=doc.get("secondary_source", r.secondary_source),
+            leq=eval_leq,
+            lmax=eval_lmax,
+            leq_standard=leq_standard,
+            lmax_standard=lmax_standard,
+            leq_exceeded=round(max(0, eval_leq - leq_standard), 1),
+            lmax_exceeded=round(max(0, eval_lmax - lmax_standard), 1) if lmax_standard else 0,
+            duration=r.duration,
+            audio_file=r.audio_file,
+        ))
+
+    return resolved, bool(db_docs_by_id)
+
+
+def recompute_statistics(records: List[NoiseRecord]):
+    """DB에서 조회한 원본 기록을 기준으로 통계를 서버에서 다시 계산한다."""
+    total_count = len(records)
+    if total_count == 0:
+        return Statistics()
+
+    leqs = [r.leq for r in records]
+    lmaxs = [r.lmax for r in records]
+    exceeded_count = sum(
+        1 for r in records if (r.leq_exceeded or 0) > 0 or (r.lmax_exceeded or 0) > 0
+    )
+    daytime_count = sum(1 for r in records if r.time_zone == "주간")
+    nighttime_count = sum(1 for r in records if r.time_zone == "야간")
+
+    max_leq_idx = max(range(total_count), key=lambda i: leqs[i])
+    max_lmax_idx = max(range(total_count), key=lambda i: lmaxs[i])
+
+    return Statistics(
+        total_count=total_count,
+        exceeded_count=exceeded_count,
+        exceed_rate=round(exceeded_count / total_count * 100, 1),
+        avg_leq=round(sum(leqs) / total_count, 1),
+        avg_lmax=round(sum(lmaxs) / total_count, 1),
+        max_leq=leqs[max_leq_idx],
+        max_leq_at=records[max_leq_idx].measured_at,
+        max_lmax=lmaxs[max_lmax_idx],
+        max_lmax_at=records[max_lmax_idx].measured_at,
+        daytime_count=daytime_count,
+        nighttime_count=nighttime_count,
+    )
 
 
 # ============================================================
@@ -153,7 +264,7 @@ def get_noise_name(record: NoiseRecord):
         noise_name = f"{record.noise_type} / {record.primary_source}"
 
     if record.secondary_source:
-        noise_name += f", {record.secondary_source}"
+        noise_name += f", {', '.join(record.secondary_source)}"
 
     return noise_name
 
@@ -204,8 +315,8 @@ def get_main_noise_summary(records: List[NoiseRecord]):
             noise_type_counter[record.noise_type] += 1
         if record.primary_source:
             source_counter[record.primary_source] += 1
-        if record.secondary_source:
-            source_counter[record.secondary_source] += 1
+        for secondary in record.secondary_source or []:
+            source_counter[secondary] += 1
 
     main_noise_type = noise_type_counter.most_common(1)[0][0] if noise_type_counter else ""
     main_sources = ", ".join([item[0] for item in source_counter.most_common(3)]) if source_counter else ""
@@ -238,8 +349,8 @@ def summarize_noise_records(records: List[NoiseRecord]):
         if record.primary_source:
             source_counter[record.primary_source] += 1
 
-        if record.secondary_source:
-            source_counter[record.secondary_source] += 1
+        for secondary in record.secondary_source or []:
+            source_counter[secondary] += 1
 
         date_part, time_part = split_datetime(record.measured_at)
 
@@ -1505,17 +1616,42 @@ def create_official_required_forms_pdf(data: ReportRequest, config: dict):
 # PDF 생성 API
 # ============================================================
 @router.post("/pdf")
-def create_report_pdf(data: ReportRequest):
+async def create_report_pdf(
+    request: ReportRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    email = current_user.get("email")
+
     try:
-        config = get_report_config(data.report_type)
+        config = get_report_config(request.report_type)
 
-        if data.report_type == "official_required_forms":
-            return create_official_required_forms_pdf(data, config)
+        request.noise_records, has_db_records = await resolve_noise_records(
+            request.noise_records or [], email
+        )
+        if has_db_records:
+            request.statistics = recompute_statistics(request.noise_records)
 
-        if data.report_type == "management_office":
-            return create_management_office_pdf(data, config)
+        if request.report_type == "official_required_forms":
+            response = create_official_required_forms_pdf(request, config)
+        elif request.report_type == "management_office":
+            response = create_management_office_pdf(request, config)
+        else:
+            response = create_general_report_pdf(request, config)
 
-        return create_general_report_pdf(data, config)
+        await report_collection.insert_one({
+            "email": email,
+            "report_type": request.report_type,
+            "title": request.title or config["title"],
+            "created_at": request.created_at or datetime.now().isoformat(),
+            "target_location": request.target.location if request.target else None,
+            "target_address": request.target.address if request.target else None,
+            "noise_records": [r.dict() for r in request.noise_records],
+            "statistics": request.statistics.dict() if request.statistics else None,
+            "damage_summary": request.damage_summary,
+            "filename": config["filename"],
+        })
+
+        return response
 
     except HTTPException:
         raise

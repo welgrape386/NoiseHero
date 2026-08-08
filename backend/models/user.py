@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 
 
@@ -30,3 +30,8 @@ class UserUpdate(BaseModel):
     committee: Optional[str] = None
     management_office: Optional[str] = None
     management_phone: Optional[str] = None
+
+
+class MicCalibrationCreate(BaseModel):
+    # 3초간 측정한 주변 소음의 평균 dB 값 (기기별 기준점, 법적 기준값 아님)
+    baseline_db: float = Field(..., ge=0, le=120)
